@@ -1,0 +1,265 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String                 @id @default(uuid())
+  email            String                 @unique
+  passwordHash     String
+  displayName      String
+  bio              String?                @default("")
+  profilePhoto     String?
+  interests        String[]
+  latitude         Float?
+  longitude        Float?
+  trustScore       Int                    @default(50)
+  role             Role                   @default(USER)
+  isVerified       Boolean                @default(false)
+  isBanned         Boolean                @default(false)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  hostedActivities Activity[]             @relation("HostedActivities")
+  activityMembers  ActivityMember[]
+  verifications    ActivityVerification[]
+  chatMessages     ChatMessage[]
+  chatRoomMembers  ChatRoomMember[]
+  receivedDMs      DirectMessage[]        @relation("ReceivedDirectMessages")
+  sentDMs          DirectMessage[]        @relation("SentDirectMessages")
+  friends          FriendContact[]        @relation("UserFriends")
+  friendOf         FriendContact[]        @relation("FriendUsers")
+  joinRequests     JoinRequest[]
+  notifications    Notification[]
+  reportedBy       Report[]               @relation("ReportedUser")
+  reports          Report[]               @relation("Reporter")
+  trustLogs        TrustLog[]
+}
+
+model Activity {
+  id              String                 @id @default(uuid())
+  hostId          String
+  title           String
+  description     String?                @default("")
+  tags            String[]
+  category        String
+  latitude        Float
+  longitude       Float
+  address         String
+  date            DateTime
+  duration        Int?
+  maxParticipants Int
+  visibility      Visibility             @default(PUBLIC)
+  status          ActivityStatus         @default(UPCOMING)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  host            User                   @relation("HostedActivities", fields: [hostId], references: [id])
+  members         ActivityMember[]
+  verifications   ActivityVerification[]
+  chatRoom        ChatRoom?
+  joinRequests    JoinRequest[]
+  notifications   Notification[]
+}
+
+model ActivityMember {
+  id         String   @id @default(uuid())
+  activityId String
+  userId     String
+  isCoHost   Boolean  @default(false)
+  joinedAt   DateTime @default(now())
+  lastReadAt DateTime @default(now())
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@unique([activityId, userId])
+}
+
+model JoinRequest {
+  id         String        @id @default(uuid())
+  activityId String
+  userId     String
+  status     RequestStatus @default(PENDING)
+  createdAt  DateTime      @default(now())
+  activity   Activity      @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user       User          @relation(fields: [userId], references: [id])
+
+  @@unique([activityId, userId])
+}
+
+model FriendContact {
+  id         String   @id @default(uuid())
+  userId     String
+  friendId   String
+  createdAt  DateTime @default(now())
+  user       User     @relation("UserFriends", fields: [userId], references: [id], onDelete: Cascade)
+  friend     User     @relation("FriendUsers", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+}
+
+model VerificationToken {
+  id        String   @id @default(uuid())
+  email     String
+  token     String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@unique([email, token])
+}
+
+model ChatRoom {
+  id         String           @id @default(uuid())
+  activityId String           @unique
+  createdAt  DateTime         @default(now())
+  messages   ChatMessage[]
+  activity   Activity         @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  members    ChatRoomMember[]
+}
+
+model ChatRoomMember {
+  id         String   @id @default(uuid())
+  chatRoomId String
+  userId     String
+  joinedAt   DateTime @default(now())
+  chatRoom   ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@unique([chatRoomId, userId])
+}
+
+model ChatMessage {
+  id        String      @id @default(uuid())
+  roomId    String
+  senderId  String
+  content   String
+  type      MessageType @default(TEXT)
+  isPinned  Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  room      ChatRoom    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender    User        @relation(fields: [senderId], references: [id])
+}
+
+model Notification {
+  id              String           @id @default(uuid())
+  recipientId     String
+  type            NotificationType
+  title           String
+  message         String
+  activityId      String?
+  relatedUserId   String?
+  isRead          Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  relatedActivity Activity?        @relation(fields: [activityId], references: [id])
+  recipient       User             @relation(fields: [recipientId], references: [id])
+}
+
+model Report {
+  id             String       @id @default(uuid())
+  reporterId     String
+  reportedUserId String
+  reason         String
+  description    String?
+  status         ReportStatus @default(PENDING)
+  adminNotes     String?
+  createdAt      DateTime     @default(now())
+  reportedUser   User         @relation("ReportedUser", fields: [reportedUserId], references: [id])
+  reporter       User         @relation("Reporter", fields: [reporterId], references: [id])
+}
+
+model TrustLog {
+  id           String    @id @default(uuid())
+  userId       String
+  action       String
+  pointsChange Int
+  activityId   String?
+  createdAt    DateTime  @default(now())
+  user         User      @relation(fields: [userId], references: [id])
+}
+
+model DirectMessage {
+  id         String      @id @default(uuid())
+  senderId   String
+  receiverId String
+  content    String
+  type       MessageType @default(TEXT)
+  createdAt  DateTime    @default(now())
+  isRead     Boolean     @default(false)
+  receiver   User        @relation("ReceivedDirectMessages", fields: [receiverId], references: [id])
+  sender     User        @relation("SentDirectMessages", fields: [senderId], references: [id])
+}
+
+model ActivityVerification {
+  id                 String             @id @default(uuid())
+  activityId         String
+  participantId      String
+  choice             VerificationChoice
+  hostFeedback       FeedbackType?
+  hostMarkedAttended Boolean?
+  finalStatus        String?
+  createdAt          DateTime           @default(now())
+  activity           Activity           @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  participant        User               @relation(fields: [participantId], references: [id])
+
+  @@unique([activityId, participantId])
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Visibility {
+  PUBLIC
+  FRIENDS
+}
+
+enum ActivityStatus {
+  UPCOMING
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  BANNED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  SYSTEM
+}
+
+enum NotificationType {
+  JOIN_REQUEST
+  APPROVAL
+  REJECTION
+  REMINDER
+  FRIEND_REQUEST
+  CANCELLATION
+}
+
+enum ReportStatus {
+  PENDING
+  WARNED
+  ACTION_TAKEN
+  DISMISSED
+}
+
+enum VerificationChoice {
+  YES_ATTENDED
+  NO_DID_NOT_ATTEND
+  NOT_CONDUCTED
+}
+
+enum FeedbackType {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+}

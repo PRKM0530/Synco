@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "ActivityMember" ADD COLUMN     "lastReadAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
