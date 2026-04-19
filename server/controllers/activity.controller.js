@@ -397,10 +397,51 @@ const toggleCoHost = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /api/activities/mine
+ * Return activities the current user is hosting OR has joined (approved member).
+ */
+const getMyActivities = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    // Activities this user created
+    const hosted = await prisma.activity.findMany({
+      where: { hostId: userId },
+      include: {
+        host: { select: { id: true, displayName: true, profilePhoto: true } },
+        _count: { select: { members: true } },
+      },
+      orderBy: { date: "desc" },
+    });
+
+    // Activities this user joined (approved member, not host)
+    const memberships = await prisma.activityMember.findMany({
+      where: { userId },
+      select: { activityId: true },
+    });
+    const joinedIds = memberships.map((m) => m.activityId);
+
+    const joined = await prisma.activity.findMany({
+      where: { id: { in: joinedIds }, hostId: { not: userId } },
+      include: {
+        host: { select: { id: true, displayName: true, profilePhoto: true } },
+        _count: { select: { members: true } },
+      },
+      orderBy: { date: "desc" },
+    });
+
+    res.json({ hosted, joined });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   createActivity,
   getActivities,
   getActivityById,
+  getMyActivities,
   updateActivity,
   deleteActivity,
   toggleCoHost,

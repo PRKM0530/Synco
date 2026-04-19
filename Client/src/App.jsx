@@ -26,6 +26,7 @@ import DirectMessagePage from "./pages/chat/DirectMessagePage";
 import VerifyAttendancePage from "./pages/activity/VerifyAttendancePage";
 import HostRosterPage from "./pages/activity/HostRosterPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import ExplorePage from "./pages/explore/ExplorePage";
 import VerifyOTPPage from "./pages/auth/VerifyOTPPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
@@ -166,6 +167,14 @@ const AppContent = () => {
             element={
               <ProtectedRoute>
                 <MapPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/explore"
+            element={
+              <ProtectedRoute>
+                <ExplorePage />
               </ProtectedRoute>
             }
           />

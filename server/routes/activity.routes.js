@@ -10,6 +10,7 @@ const {
   createActivity,
   getActivities,
   getActivityById,
+  getMyActivities,
   updateActivity,
   deleteActivity,
   toggleCoHost,
@@ -20,6 +21,9 @@ const router = express.Router();
 
 // GET /api/activities — browsable feed (upcoming, public or friends-only)
 router.get("/", optionalAuth, getActivities);
+
+// GET /api/activities/mine — current user's hosted + joined activities
+router.get("/mine", auth, getMyActivities);
 
 // GET /api/activities/:id — activity detail (works without login)
 router.get("/:id", optionalAuth, getActivityById);

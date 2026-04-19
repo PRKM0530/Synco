@@ -67,6 +67,7 @@ export const userAPI = {
 export const activityAPI = {
   createActivity: (data) => api.post("/activities", data),
   getActivities: (params) => api.get("/activities", { params }),
+  getMyActivities: () => api.get("/activities/mine"),
   getActivityById: (id) => api.get(`/activities/${id}`),
   updateActivity: (id, data) => api.put(`/activities/${id}`, data),
   deleteActivity: (id) => api.delete(`/activities/${id}`),
