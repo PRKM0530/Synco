@@ -394,10 +394,76 @@ const toggleCoHost = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /api/activities/mine
+ * Return activities the current user is hosting OR has joined (approved member).
+ */
+const getMyActivities = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const {
+      hostedOffset = 0,
+      joinedOffset = 0,
+      limit = 10,
+    } = req.query;
+
+    const parsedHostedOffset = Math.max(parseInt(hostedOffset, 10) || 0, 0);
+    const parsedJoinedOffset = Math.max(parseInt(joinedOffset, 10) || 0, 0);
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 20);
+
+    const hostedWhere = { hostId: userId };
+    const joinedWhere = {
+      hostId: { not: userId },
+      members: {
+        some: { userId },
+      },
+    };
+
+    const [hostedTotal, hosted, joinedTotal, joined] = await prisma.$transaction([
+      prisma.activity.count({ where: hostedWhere }),
+      prisma.activity.findMany({
+        where: hostedWhere,
+        include: {
+          host: { select: { id: true, displayName: true, profilePhoto: true } },
+          _count: { select: { members: true } },
+        },
+        orderBy: { date: "desc" },
+        skip: parsedHostedOffset,
+        take: parsedLimit,
+      }),
+      prisma.activity.count({ where: joinedWhere }),
+      prisma.activity.findMany({
+        where: joinedWhere,
+        include: {
+          host: { select: { id: true, displayName: true, profilePhoto: true } },
+          _count: { select: { members: true } },
+        },
+        orderBy: { date: "desc" },
+        skip: parsedJoinedOffset,
+        take: parsedLimit,
+      }),
+    ]);
+
+    res.json({
+      hosted,
+      hostedTotal,
+      hostedHasMore: parsedHostedOffset + hosted.length < hostedTotal,
+      hostedNextOffset: parsedHostedOffset + hosted.length,
+      joined,
+      joinedTotal,
+      joinedHasMore: parsedJoinedOffset + joined.length < joinedTotal,
+      joinedNextOffset: parsedJoinedOffset + joined.length,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   createActivity,
   getActivities,
   getActivityById,
+  getMyActivities,
   updateActivity,
   deleteActivity,
   toggleCoHost,
