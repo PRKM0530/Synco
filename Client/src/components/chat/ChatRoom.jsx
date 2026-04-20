@@ -6,7 +6,7 @@ import { MessageSquare, Pin, MoreVertical, Trash2 } from "lucide-react";
 
 const ChatRoom = ({ activityId, isHost }) => {
   const { user } = useAuth();
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState([]);3
   const [newMessage, setNewMessage] = useState("");
   const [lastReadAt, setLastReadAt] = useState(null);
   const [loading, setLoading] = useState(true);

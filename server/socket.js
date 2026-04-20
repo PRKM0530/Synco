@@ -120,8 +120,8 @@ const initializeSocket = (server) => {
     });
 
     /** delete-activity-message — broadcast deletion event, client removes from UI */
-    socket.on("delete-activity-message", ({ activityId, messageId }) => {
-      io.to(`activity_${activityId}`).emit("message-deleted", messageId);
+    socket.on("delete-activity-message", ({ activityId, deletedMessage }) => {
+      io.to(`activity_${activityId}`).emit("message-deleted", deletedMessage);
     });
 
     /** pin-activity-message — broadcast pin toggle to the room */

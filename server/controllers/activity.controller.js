@@ -88,21 +88,8 @@ const createActivity = async (req, res, next) => {
  */
 const getActivities = async (req, res, next) => {
   try {
-    const {
-      lat,
-      lng,
-      radius = 50,
-      category,
-      search,
-      date,
-      visibility,
-      offset = 0,
-      limit = 20,
-    } = req.query;
+    const { lat, lng, radius = 50, category, search, date, visibility } = req.query;
     const userId = req.user?.id;
-
-    const parsedOffset = Math.max(parseInt(offset, 10) || 0, 0);
-    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 20);
 
 
     let where = {
@@ -195,79 +182,32 @@ const getActivities = async (req, res, next) => {
       where.date = { gt: now };
     }
 
-    const include = {
-      host: { select: { id: true, displayName: true, profilePhoto: true } },
-      _count: { select: { members: true } },
-    };
+    const activities = await prisma.activity.findMany({
+      where,
+      include: {
+        host: { select: { id: true, displayName: true, profilePhoto: true } },
+        _count: { select: { members: true } },
+      },
+      orderBy: { date: "asc" },
+      take: 100,
+    });
 
-    // Distance-based ordering requires in-memory sort, so paginate after distance calc.
+    let filteredActivities = activities;
     if (lat && lng) {
       const userLat = parseFloat(lat);
       const userLng = parseFloat(lng);
       const r = parseFloat(radius);
 
-      if (!Number.isFinite(userLat) || !Number.isFinite(userLng) || !Number.isFinite(r)) {
-        return res.status(400).json({ error: "Invalid lat/lng/radius query params." });
-      }
-
-      const latDelta = r / 111.0;
-      const lngDelta = r / (111.0 * Math.cos((userLat * Math.PI) / 180));
-      const geoWhere = {
-        ...where,
-        latitude: {
-          gte: userLat - latDelta,
-          lte: userLat + latDelta,
-        },
-        longitude: {
-          gte: userLng - lngDelta,
-          lte: userLng + lngDelta,
-        },
-      };
-
-      const activities = await prisma.activity.findMany({
-        where: geoWhere,
-        include,
-        orderBy: { date: "asc" },
-      });
-
-      const filteredActivities = activities
+      filteredActivities = activities
         .map((act) => ({
           ...act,
           distance: getDistance(userLat, userLng, act.latitude, act.longitude),
         }))
         .filter((act) => act.distance <= r)
         .sort((a, b) => a.distance - b.distance);
-
-      const pagedActivities = filteredActivities.slice(
-        parsedOffset,
-        parsedOffset + parsedLimit,
-      );
-
-      return res.json({
-        activities: pagedActivities,
-        total: filteredActivities.length,
-        hasMore: parsedOffset + pagedActivities.length < filteredActivities.length,
-        nextOffset: parsedOffset + pagedActivities.length,
-      });
     }
 
-    const [total, activities] = await prisma.$transaction([
-      prisma.activity.count({ where }),
-      prisma.activity.findMany({
-        where,
-        include,
-        orderBy: { date: "asc" },
-        skip: parsedOffset,
-        take: parsedLimit,
-      }),
-    ]);
-
-    res.json({
-      activities,
-      total,
-      hasMore: parsedOffset + activities.length < total,
-      nextOffset: parsedOffset + activities.length,
-    });
+    res.json({ activities: filteredActivities });
   } catch (err) {
     next(err);
   }
@@ -387,7 +327,7 @@ const updateActivity = async (req, res, next) => {
 
 /**
  * Cancel and permanently delete an activity.
- * Only the host (or an admin) can cancel. Typically used before the event starts.
+ * Only the original host (or an admin) can cancel. Typically used before the event starts.
  * Cascading deletes in the schema remove members, join-requests, and chat room automatically.
  */
 const deleteActivity = async (req, res, next) => {
@@ -398,14 +338,11 @@ const deleteActivity = async (req, res, next) => {
     if (!activity)
       return res.status(404).json({ error: "Activity not found." });
 
-    // Allow co-hosts to delete as well
-    const isCoHost = await prisma.activityMember.findFirst({
-      where: { activityId: id, userId: req.user.id, isCoHost: true },
-    });
-    if (activity.hostId !== req.user.id && !isCoHost && req.user.role !== "ADMIN") {
+    // Co-hosts are intentionally not allowed to delete activities.
+    if (activity.hostId !== req.user.id && req.user.role !== "ADMIN") {
       return res
         .status(403)
-        .json({ error: "Only the host can cancel this activity." });
+        .json({ error: "Only the original host can cancel this activity." });
     }
 
     await prisma.activity.delete({ where: { id } });
@@ -449,73 +386,8 @@ const toggleCoHost = async (req, res, next) => {
     });
 
     res.json({
-      message: updated.isCoHost ? "User promoted to host." : "User demoted from host.",
+      message: updated.isCoHost ? "User promoted to co-host." : "User demoted from co-host.",
       isCoHost: updated.isCoHost,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-/**
- * GET /api/activities/mine
- * Return activities the current user is hosting OR has joined (approved member).
- */
-const getMyActivities = async (req, res, next) => {
-  try {
-    const userId = req.user.id;
-    const {
-      hostedOffset = 0,
-      joinedOffset = 0,
-      limit = 10,
-    } = req.query;
-
-    const parsedHostedOffset = Math.max(parseInt(hostedOffset, 10) || 0, 0);
-    const parsedJoinedOffset = Math.max(parseInt(joinedOffset, 10) || 0, 0);
-    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 20);
-
-    const hostedWhere = { hostId: userId };
-    const joinedWhere = {
-      hostId: { not: userId },
-      members: {
-        some: { userId },
-      },
-    };
-
-    const [hostedTotal, hosted, joinedTotal, joined] = await prisma.$transaction([
-      prisma.activity.count({ where: hostedWhere }),
-      prisma.activity.findMany({
-        where: hostedWhere,
-        include: {
-          host: { select: { id: true, displayName: true, profilePhoto: true } },
-          _count: { select: { members: true } },
-        },
-        orderBy: { date: "desc" },
-        skip: parsedHostedOffset,
-        take: parsedLimit,
-      }),
-      prisma.activity.count({ where: joinedWhere }),
-      prisma.activity.findMany({
-        where: joinedWhere,
-        include: {
-          host: { select: { id: true, displayName: true, profilePhoto: true } },
-          _count: { select: { members: true } },
-        },
-        orderBy: { date: "desc" },
-        skip: parsedJoinedOffset,
-        take: parsedLimit,
-      }),
-    ]);
-
-    res.json({
-      hosted,
-      hostedTotal,
-      hostedHasMore: parsedHostedOffset + hosted.length < hostedTotal,
-      hostedNextOffset: parsedHostedOffset + hosted.length,
-      joined,
-      joinedTotal,
-      joinedHasMore: parsedJoinedOffset + joined.length < joinedTotal,
-      joinedNextOffset: parsedJoinedOffset + joined.length,
     });
   } catch (err) {
     next(err);
@@ -526,7 +398,6 @@ module.exports = {
   createActivity,
   getActivities,
   getActivityById,
-  getMyActivities,
   updateActivity,
   deleteActivity,
   toggleCoHost,

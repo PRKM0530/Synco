@@ -79,7 +79,7 @@ exports.getDirectMessages = async (req, res, next) => {
   }
 };
 
-// Toggle Pin Status (Host Only)
+// Toggle Pin Status (Host/Co-host)
 exports.pinMessage = async (req, res, next) => {
   try {
     const { messageId } = req.params;
@@ -91,8 +91,25 @@ exports.pinMessage = async (req, res, next) => {
     });
 
     if (!message) return res.status(404).json({ error: "Message not found" });
-    if (message.room.activity.hostId !== userId) {
-      return res.status(403).json({ error: "Only the host can pin messages." });
+
+    const isCoHost = await prisma.activityMember.findUnique({
+      where: {
+        activityId_userId: {
+          activityId: message.room.activity.id,
+          userId,
+        },
+      },
+      select: { isCoHost: true },
+    });
+    const canManage =
+      message.room.activity.hostId === userId || isCoHost?.isCoHost === true;
+
+    if (!canManage) {
+      return res.status(403).json({ error: "Only host or co-host can pin messages." });
+    }
+
+    if (message.type === "SYSTEM") {
+      return res.status(400).json({ error: "System/deleted messages cannot be pinned." });
     }
 
     const updated = await prisma.chatMessage.update({
@@ -106,7 +123,7 @@ exports.pinMessage = async (req, res, next) => {
   }
 };
 
-// Delete Message (Host Only)
+// Delete Message (Host/Co-host can delete any; participant can delete own)
 exports.deleteMessage = async (req, res, next) => {
   try {
     const { messageId } = req.params;
@@ -118,15 +135,50 @@ exports.deleteMessage = async (req, res, next) => {
     });
 
     if (!message) return res.status(404).json({ error: "Message not found" });
-    if (message.room.activity.hostId !== userId) {
-      return res
-        .status(403)
-        .json({ error: "Only the host can delete messages." });
+
+    const membership = await prisma.activityMember.findUnique({
+      where: {
+        activityId_userId: {
+          activityId: message.room.activity.id,
+          userId,
+        },
+      },
+      select: { isCoHost: true },
+    });
+
+    const isHost = message.room.activity.hostId === userId;
+    const isCoHost = membership?.isCoHost === true;
+    const isOwnMessage = message.senderId === userId;
+
+    if (!isHost && !isCoHost && !isOwnMessage) {
+      return res.status(403).json({ error: "You are not allowed to delete this message." });
     }
 
-    await prisma.chatMessage.delete({ where: { id: messageId } });
+    if (message.type === "SYSTEM") {
+      return res.status(400).json({ error: "This message is already deleted." });
+    }
 
-    res.json({ message: "Message deleted successfully." });
+    let deletedText = "This message was deleted.";
+    if (!isOwnMessage) {
+      if (isHost) deletedText = "This message was deleted by host.";
+      else if (isCoHost) deletedText = "This message was deleted by co-host.";
+    }
+
+    const updated = await prisma.chatMessage.update({
+      where: { id: messageId },
+      data: {
+        content: deletedText,
+        type: "SYSTEM",
+        isPinned: false,
+      },
+      include: {
+        sender: {
+          select: { id: true, displayName: true, profilePhoto: true },
+        },
+      },
+    });
+
+    res.json({ message: "Message deleted successfully.", deletedMessage: updated });
   } catch (err) {
     next(err);
   }

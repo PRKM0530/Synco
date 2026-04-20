@@ -219,6 +219,8 @@ const ActivityDetailPage = () => {
   const myMembership = activity.members.find((m) => m.userId === user?.id);
   const isHost = user?.id === activity.hostId || myMembership?.isCoHost === true;
   const isOriginalHost = user?.id === activity.hostId;
+  const canEditActivity = isHost;
+  const canDeleteActivity = isOriginalHost;
   const eventDate = new Date(activity.date);
   const getInitials = (name) => name?.charAt(0).toUpperCase() || "?";
   const hasStarted = new Date() >= eventDate;
@@ -518,7 +520,7 @@ const ActivityDetailPage = () => {
                 >
                   {member.user.displayName}
                 </span>
-                {/* Host badge */}
+                {/* Host/co-host badge */}
                 {(member.userId === activity.hostId || member.isCoHost) && (
                   <span style={{
                     fontSize: "9px",
@@ -529,7 +531,7 @@ const ActivityDetailPage = () => {
                     fontWeight: 600,
                     letterSpacing: "0.04em",
                   }}>
-                    HOST
+                    {member.userId === activity.hostId ? "HOST" : "CO-HOST"}
                   </span>
                 )}
               </Link>
@@ -538,7 +540,7 @@ const ActivityDetailPage = () => {
                 <button
                   onClick={() => handleToggleCoHost(member)}
                   disabled={togglingCoHost === member.userId}
-                  title={member.isCoHost ? "Remove host access" : "Make host"}
+                  title={member.isCoHost ? "Remove co-host access" : "Make co-host"}
                   style={{
                     marginTop: "2px",
                     background: member.isCoHost ? "rgba(231,76,60,0.12)" : "rgba(108,92,231,0.1)",
@@ -557,7 +559,7 @@ const ActivityDetailPage = () => {
                   }}
                 >
                   <Star size={9} />
-                  {togglingCoHost === member.userId ? "..." : member.isCoHost ? "Demote" : "Make Host"}
+                  {togglingCoHost === member.userId ? "..." : member.isCoHost ? "Demote" : "Make Co-Host"}
                 </button>
               )}
             </div>
@@ -593,31 +595,35 @@ const ActivityDetailPage = () => {
               gap: "var(--space-3)",
             }}
           >
-            {/* Before start: edit + cancel */}
+            {/* Before start: edit + cancel (cancel is original host only) */}
             {!hasStarted && activity.status !== "COMPLETED" && (
               <>
-                <button
-                  className="btn btn--secondary btn--full"
-                  onClick={() => navigate(`/activities/${activity.id}/edit`)}
-                >
-                  Edit Activity
-                </button>
-                <button
-                  className="btn btn--danger btn--full"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "Cancel this activity? This cannot be undone.",
-                      )
-                    ) {
-                      activityAPI
-                        .deleteActivity(activity.id)
-                        .then(() => navigate("/"));
-                    }
-                  }}
-                >
-                  Cancel Activity
-                </button>
+                {canEditActivity && (
+                  <button
+                    className="btn btn--secondary btn--full"
+                    onClick={() => navigate(`/activities/${activity.id}/edit`)}
+                  >
+                    Edit Activity
+                  </button>
+                )}
+                {canDeleteActivity && (
+                  <button
+                    className="btn btn--danger btn--full"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Cancel this activity? This cannot be undone.",
+                        )
+                      ) {
+                        activityAPI
+                          .deleteActivity(activity.id)
+                          .then(() => navigate("/"));
+                      }
+                    }}
+                  >
+                    Cancel Activity
+                  </button>
+                )}
               </>
             )}
 
