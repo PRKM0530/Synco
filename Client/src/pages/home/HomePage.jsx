@@ -6,7 +6,7 @@ import ActivityCard from "../../components/activity/ActivityCard";
 import SyncoLogo from "../../components/common/SyncoLogo";
 import OnboardingModal from "../../components/profile/OnboardingModal";
 
-import { Sparkles, Search, Users, AlertTriangle, Bell } from "lucide-react";
+import { Sparkles, Search, Users, AlertTriangle } from "lucide-react";
 import FloatingActionButton from "../../components/layout/FloatingActionButton";
 
 const FOR_YOU_PAGE_SIZE = 10;
@@ -52,10 +52,6 @@ const HomePage = () => {
   const [myLoading, setMyLoading] = useState(false);
   const [sosActionId, setSosActionId] = useState(null);
   const myActivityLoadedRef = useRef(false);
-  const [notificationPermission, setNotificationPermission] = useState(() => {
-    if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
-    return window.Notification.permission;
-  });
 
   // Reset tab caches when authenticated user changes.
   useEffect(() => {
@@ -146,25 +142,6 @@ const HomePage = () => {
   const refreshMySos = async () => {
     const sosRes = await sosAPI.getMine();
     setMySosSignals(sosRes.data.signals || []);
-  };
-
-  const requestNotificationPermission = async () => {
-    if (!("Notification" in window)) {
-      alert("Browser notifications are not supported on this device.");
-      return;
-    }
-    try {
-      const permission = await window.Notification.requestPermission();
-      setNotificationPermission(permission);
-      if (permission === "granted") {
-        alert("Notifications enabled. You will now receive SOS alerts.");
-      } else {
-        alert("Notifications are blocked. Please allow them in browser site settings.");
-      }
-    } catch (err) {
-      console.error("Notification permission error:", err);
-      alert("Unable to enable notifications right now.");
-    }
   };
 
   const handleCompleteSos = async (id) => {
@@ -355,32 +332,6 @@ const HomePage = () => {
         <p className="page-subtitle" style={{ fontSize: "var(--text-base)" }}>
           Discover people nearby and do things together
         </p>
-
-        {notificationPermission !== "granted" && notificationPermission !== "unsupported" && (
-          <div
-            className="card"
-            style={{
-              marginTop: "var(--space-4)",
-              padding: "var(--space-3)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "var(--space-3)",
-              border: "1px solid rgba(229, 62, 62, 0.25)",
-              background: "rgba(229, 62, 62, 0.08)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <Bell size={16} color="#e53e3e" />
-              <span style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
-                Enable notifications to receive SOS alerts
-              </span>
-            </div>
-            <button className="btn btn--danger btn--sm" onClick={requestNotificationPermission}>
-              Allow
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Tab Bar */}

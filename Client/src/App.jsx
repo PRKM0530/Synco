@@ -3,14 +3,12 @@ import {
   Routes,
   Route,
   Navigate,
-  useNavigate,
 } from "react-router-dom";
 import { lazy, Suspense, useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Navbar from "./components/layout/Navbar";
 import BottomNav from "./components/layout/BottomNav";
 import ErrorBoundary from "./components/ErrorBoundary";
-import { getSocket } from "./services/socket";
 import { userAPI } from "./services/api";
 
 // Lazy-loaded map pages (heavy Google Maps SDK)
@@ -97,7 +95,6 @@ const GuestRoute = ({ children }) => {
 
 const AppContent = () => {
   const { isAuthenticated } = useAuth();
-  const navigate = useNavigate();
 
   // Keep user location updated for nearby SOS matching.
   useEffect(() => {
@@ -118,54 +115,6 @@ const AppContent = () => {
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 120000 },
     );
   }, [isAuthenticated]);
-
-  // Ask once for browser notification permission.
-  useEffect(() => {
-    if (!isAuthenticated || !("Notification" in window)) return;
-    if (window.Notification.permission !== "default") return;
-
-    const askedKey = "synco_notif_permission_asked";
-    if (localStorage.getItem(askedKey)) return;
-    localStorage.setItem(askedKey, "1");
-
-    const allow = window.confirm(
-      "Enable browser notifications to receive SOS alerts in real-time?",
-    );
-    if (allow) {
-      window.Notification.requestPermission().catch(() => {});
-    }
-  }, [isAuthenticated]);
-
-  // Listen for real-time SOS notifications
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const socket = getSocket();
-    const handleNotification = (data) => {
-      if (data.type === "SOS_ALERT") {
-        const title = data.title || "SOS Alert Nearby";
-        const message = data.message || "Someone nearby needs help.";
-
-        if ("Notification" in window && window.Notification.permission === "granted") {
-          const browserNotif = new window.Notification(title, {
-            body: message,
-            tag: `sos-${data.id || Date.now()}`,
-          });
-          browserNotif.onclick = () => {
-            window.focus();
-            navigate("/map");
-            browserNotif.close();
-          };
-          return;
-        }
-
-        if (window.confirm(`${message}\n\nOpen map to see location?`)) {
-          navigate("/map");
-        }
-      }
-    };
-    socket.on("new-notification", handleNotification);
-    return () => socket.off("new-notification", handleNotification);
-  }, [isAuthenticated, navigate]);
 
   return (
     <>
