@@ -1,12 +1,6 @@
-/* ═══════════════════════════════════════════════════════════
-   SYNCO — Design System
-   "Discover People. Do Things Together."
-   ═══════════════════════════════════════════════════════════ */
 
-/* ─── Google Fonts ────────────────────────────────────────── */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800&display=swap");
 
-/* ─── Design Tokens ──────────────────────────────────────── */
 :root {
   /* Brand Colors */
   --color-primary: #2b5a8e;
@@ -125,7 +119,6 @@
   --sidebar-width: 280px;
 }
 
-/* ─── CSS Reset ──────────────────────────────────────────── */
 *,
 *::before,
 *::after {
@@ -216,7 +209,7 @@ ol {
   list-style: none;
 }
 
-/* ─── Scrollbar ──────────────────────────────────────────── */
+/* ─── Scrollbar  */
 ::-webkit-scrollbar {
   width: 6px;
 }
@@ -231,7 +224,6 @@ ol {
   background: var(--color-text-muted);
 }
 
-/* ─── Utility Classes ────────────────────────────────────── */
 .container {
   width: 100%;
   max-width: var(--max-width);
@@ -265,7 +257,7 @@ ol {
   border-width: 0;
 }
 
-/* ─── Animations ─────────────────────────────────────────── */
+/* ─── Animations*/
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -404,9 +396,9 @@ ol {
   animation-delay: 420ms;
 }
 
-/* ─── Component Styles ───────────────────────────────────── */
+/* ─── Component Styles */
 
-/* --- Button --- */
+/*  Button  */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -701,7 +693,7 @@ textarea.input {
   background: var(--color-primary-dark);
 }
 
-/* --- Modal --- */
+/* Modal  */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -755,7 +747,7 @@ textarea.input {
   color: var(--color-text);
 }
 
-/* --- Toast / Alert --- */
+/* Toast / Alert  */
 .toast {
   position: fixed;
   top: var(--space-4);
@@ -790,7 +782,7 @@ textarea.input {
   color: var(--color-warning);
 }
 
-/* ─── Layout ─────────────────────────────────────────────── */
+/* Layout */
 
 /* --- Navbar --- */
 .navbar {
@@ -1034,7 +1026,7 @@ textarea.input {
   padding-right: var(--space-2);
 }
 
-/* --- Home Page Tabs --- */
+/*  Home Page Tabs */
 .home-tabs {
   display: flex;
   gap: var(--space-1);
@@ -1436,7 +1428,7 @@ textarea.input {
   padding: var(--space-1);
 }
 
-/* ─── Responsive ─────────────────────────────────────────── */
+/* ─── Responsive ── */
 @media (min-width: 768px) {
   .bottom-nav {
     display: none;
@@ -1480,7 +1472,7 @@ textarea.input {
   }
 }
 
-/* ─── Loading Skeleton ───────────────────────────────────── */
+/* ─── Loading Skeleton ─────────*/
 .skeleton {
   background: linear-gradient(
     90deg,
@@ -1508,7 +1500,7 @@ textarea.input {
   border-radius: var(--radius-full);
 }
 
-/* ─── Empty State ────────────────────────────────────────── */
+/* ─── Empty State ── */
 .empty-state {
   text-align: center;
   padding: var(--space-16) var(--space-4);
@@ -1536,7 +1528,6 @@ textarea.input {
 
 /* ===== Category Map Markers ===== */
 
-/* Override Leaflet default div-icon white box */
 .category-marker-wrapper {
   background: none !important;
   border: none !important;
@@ -1618,8 +1609,91 @@ textarea.input {
   animation: markerBounceIn 0.4s ease-out both;
 }
 
-/* User location blue dot */
-.user-location-marker {
-  background: none !important;
-  border: none !important;
+/* ===== Marker Cluster Bubbles ===== */
+.cluster-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1a3c63 0%, #2b5a8e 100%);
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+  font-family: "Inter", sans-serif;
+  border: 3px solid white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.cluster-marker:hover {
+  transform: scale(1.15);
+}
+
+/* ===== SOS Marker ===== */
+.sos-marker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  cursor: pointer;
+}
+
+.sos-icon {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1a1a1a 0%, #c0392b 100%);
+  border: 3px solid #e53e3e;
+  box-shadow: 0 0 12px rgba(229, 62, 62, 0.6);
+}
+
+.sos-pulse-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 36px;
+  height: 36px;
+  transform: translate(-50%, -50%) scale(1);
+  border-radius: 50%;
+  border: 3px solid rgba(229, 62, 62, 0.7);
+  background: rgba(229, 62, 62, 0.12);
+  animation: sosPulse 2s ease-out infinite;
+  z-index: 1;
+}
+
+@keyframes sosPulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.8;
+    border-width: 3px;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.2);
+    opacity: 0;
+    border-width: 1px;
+  }
+}
+
+/* ===== SOS FAB Button ===== */
+.fab-action-sos {
+  --sos-red: #e53e3e;
+}
+
+.fab-sos-icon {
+  color: var(--sos-red) !important;
+}
+
+.fab-action-sos:hover .fab-sos-icon {
+  background: var(--sos-red) !important;
+  color: white !important;
 }

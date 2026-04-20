@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ChevronDown, Plus, MapPin } from "lucide-react";
+import { ChevronDown, Plus, MapPin, AlertTriangle } from "lucide-react";
+import { sosAPI } from "../../services/api";
 
 const FAB_ACTIONS = [
   { id: "create", icon: <Plus size={22} />, label: "Create Activity", path: "/activities/create" },
@@ -9,6 +10,7 @@ const FAB_ACTIONS = [
 
 const FloatingActionButton = () => {
   const [open, setOpen] = useState(false);
+  const [sosSending, setSosSending] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -18,6 +20,37 @@ const FloatingActionButton = () => {
   const handleAction = (path) => {
     setOpen(false);
     navigate(path);
+  };
+
+  const handleSos = () => {
+    if (sosSending) return;
+    setSosSending(true);
+    if (!navigator.geolocation) {
+      alert("Geolocation not available on this device.");
+      setSosSending(false);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          await sosAPI.create({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+          setOpen(false);
+          alert("🚨 SOS signal sent! Others nearby can see your location on the map.");
+        } catch (err) {
+          console.error("SOS error:", err);
+          alert("Failed to send SOS. Please try again.");
+        }
+        setSosSending(false);
+      },
+      () => {
+        alert("Could not get your location. Please enable location access.");
+        setSosSending(false);
+      },
+      { timeout: 8000, enableHighAccuracy: true },
+    );
   };
 
   return (
@@ -33,13 +66,26 @@ const FloatingActionButton = () => {
       <div className="fab-container">
         {/* Secondary action buttons */}
         <div className={`fab-actions ${open ? "fab-actions--open" : ""}`}>
+          {/* SOS button */}
+          <button
+            className="fab-action-btn fab-action-sos"
+            onClick={handleSos}
+            title="Send SOS"
+            disabled={sosSending}
+            style={{ transitionDelay: open ? "0ms" : "0ms" }}
+          >
+            <span className="fab-action-icon fab-sos-icon">
+              <AlertTriangle size={22} />
+            </span>
+            <span className="fab-action-label">{sosSending ? "Sending..." : "SOS"}</span>
+          </button>
           {FAB_ACTIONS.map((action, i) => (
             <button
               key={action.id}
               className="fab-action-btn"
               onClick={() => handleAction(action.path)}
               title={action.label}
-              style={{ transitionDelay: open ? `${i * 60}ms` : "0ms" }}
+              style={{ transitionDelay: open ? `${(i + 1) * 60}ms` : "0ms" }}
             >
               <span className="fab-action-icon">{action.icon}</span>
               <span className="fab-action-label">{action.label}</span>

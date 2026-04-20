@@ -1,71 +1,17 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import { MapPin, Search, Loader } from "lucide-react";
-
-// Fix default marker icon
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
-
-const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-
-// Load Google Places JS (only the places library, not the full maps SDK)
-let googleReady = false;
-let googleReadyPromise = null;
-const loadGooglePlaces = () => {
-  if (googleReady) return Promise.resolve();
-  if (googleReadyPromise) return googleReadyPromise;
-  googleReadyPromise = new Promise((resolve, reject) => {
-    if (window.google?.maps?.places) {
-      googleReady = true;
-      resolve();
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_API_KEY}&libraries=places&loading=async`;
-    script.async = true;
-    script.onload = () => { googleReady = true; resolve(); };
-    script.onerror = () => reject(new Error("Failed to load Google Maps"));
-    document.head.appendChild(script);
-  });
-  return googleReadyPromise;
-};
-
-// Click handler component
-const ClickHandler = ({ onMapClick }) => {
-  useMapEvents({
-    click(e) {
-      onMapClick(e.latlng);
-    },
-  });
-  return null;
-};
-
-// Recenter helper
-const RecenterMap = ({ center }) => {
-  const map = useMap();
-  useEffect(() => {
-    if (center) map.setView(center, map.getZoom());
-  }, [center]);
-  return null;
-};
+import { loadGoogleMaps } from "../../utils/googleMaps";
 
 const MapPicker = ({ onLocationSelect, onAddressChange, initialLocation }) => {
   const parseLocation = (loc) => {
     if (!loc) return null;
-    if (Array.isArray(loc)) return [loc[0], loc[1]];
-    return [loc.lat, loc.lng];
+    if (Array.isArray(loc)) return { lat: loc[0], lng: loc[1] };
+    return { lat: loc.lat, lng: loc.lng };
   };
 
   const parsedInitial = parseLocation(initialLocation);
-  const defaultCenter = [28.6139, 77.209];
+  const defaultCenter = { lat: 28.6139, lng: 77.209 };
 
-  const [center, setCenter] = useState(parsedInitial || defaultCenter);
   const [position, setPosition] = useState(parsedInitial);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -73,38 +19,76 @@ const MapPicker = ({ onLocationSelect, onAddressChange, initialLocation }) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searching, setSearching] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState(-1);
+  const [mapReady, setMapReady] = useState(false);
+
+  const mapRef = useRef(null);
+  const mapDivRef = useRef(null);
+  const markerRef = useRef(null);
   const debounceRef = useRef(null);
   const wrapperRef = useRef(null);
-  const googleLoadedRef = useRef(false);
+  const centerRef = useRef(parsedInitial || defaultCenter);
 
-  // Load Google Places on mount
+  // Init Google Map
   useEffect(() => {
-    loadGooglePlaces().then(() => {
-      googleLoadedRef.current = true;
-    }).catch((err) => {
-      console.error("Google Places failed to load:", err);
-    });
-  }, []);
+    let cancelled = false;
+    loadGoogleMaps().then(() => {
+      if (cancelled || !mapDivRef.current) return;
 
-  useEffect(() => {
-    if (initialLocation) {
-      const pLoc = parseLocation(initialLocation);
-      if (pLoc) {
-        setCenter(pLoc);
-        setPosition(pLoc);
+      const map = new google.maps.Map(mapDivRef.current, {
+        center: centerRef.current,
+        zoom: 13,
+        mapId: "synco-picker",
+        disableDefaultUI: false,
+        zoomControl: true,
+        streetViewControl: false,
+        mapTypeControl: false,
+        fullscreenControl: false,
+        gestureHandling: "greedy",
+      });
+      mapRef.current = map;
+
+      // Click to pin
+      map.addListener("click", (e) => {
+        const lat = e.latLng.lat();
+        const lng = e.latLng.lng();
+        placeMarker({ lat, lng }, map);
+        if (onLocationSelect) onLocationSelect([lat, lng]);
+        // Reverse geocode
+        const geocoder = new google.maps.Geocoder();
+        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+          if (status === "OK" && results?.[0]) {
+            setSearchQuery(results[0].formatted_address);
+            if (onAddressChange) onAddressChange(results[0].formatted_address);
+          }
+        });
+      });
+
+      // Place initial marker
+      if (parsedInitial) {
+        placeMarker(parsedInitial, map);
       }
-    }
-  }, [initialLocation]);
+
+      setMapReady(true);
+    }).catch(() => {
+      setError("Failed to load Google Maps.");
+    });
+
+    return () => { cancelled = true; };
+  }, []);
 
   // Get user location on mount if no initial
   useEffect(() => {
     if (!initialLocation && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const loc = [pos.coords.latitude, pos.coords.longitude];
-          setCenter(loc);
+          const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          centerRef.current = loc;
           setPosition(loc);
-          if (onLocationSelect) onLocationSelect(loc);
+          if (mapRef.current) {
+            mapRef.current.setCenter(loc);
+            placeMarker(loc, mapRef.current);
+          }
+          if (onLocationSelect) onLocationSelect([loc.lat, loc.lng]);
         },
         () => {
           setError("Could not detect location. Search or click the map to set location.");
@@ -113,6 +97,18 @@ const MapPicker = ({ onLocationSelect, onAddressChange, initialLocation }) => {
       );
     }
   }, []);
+
+  const placeMarker = (pos, map) => {
+    if (markerRef.current) {
+      markerRef.current.position = pos;
+    } else if (window.google?.maps?.marker?.AdvancedMarkerElement) {
+      markerRef.current = new google.maps.marker.AdvancedMarkerElement({
+        map,
+        position: pos,
+      });
+    }
+    setPosition(pos);
+  };
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -125,7 +121,7 @@ const MapPicker = ({ onLocationSelect, onAddressChange, initialLocation }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch suggestions via new Google Places AutocompleteSuggestion API
+  // Fetch suggestions via Google Places AutocompleteSuggestion API
   const fetchSuggestions = useCallback((query) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!query || query.length < 2) {
@@ -135,12 +131,12 @@ const MapPicker = ({ onLocationSelect, onAddressChange, initialLocation }) => {
     }
     setSearching(true);
     debounceRef.current = setTimeout(async () => {
-      if (!googleLoadedRef.current || !window.google?.maps?.places?.AutocompleteSuggestion) {
+      if (!window.google?.maps?.places?.AutocompleteSuggestion) {
         setSearching(false);
         return;
       }
       try {
-        const response = await window.google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+        const response = await google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
           input: query,
         });
         const results = (response.suggestions || []).map((s) => {
@@ -168,16 +164,18 @@ const MapPicker = ({ onLocationSelect, onAddressChange, initialLocation }) => {
   const getPlaceDetails = useCallback(async (placeId, label) => {
     if (!window.google?.maps?.places?.Place) return;
     try {
-      const place = new window.google.maps.places.Place({ id: placeId });
+      const place = new google.maps.places.Place({ id: placeId });
       await place.fetchFields({ fields: ["location", "formattedAddress"] });
       const lat = place.location.lat();
       const lng = place.location.lng();
-      const loc = [lat, lng];
+      const pos = { lat, lng };
       const address = place.formattedAddress || label;
-      setCenter(loc);
-      setPosition(loc);
+      if (mapRef.current) {
+        mapRef.current.panTo(pos);
+        placeMarker(pos, mapRef.current);
+      }
       setError("");
-      if (onLocationSelect) onLocationSelect(loc);
+      if (onLocationSelect) onLocationSelect([lat, lng]);
       if (onAddressChange) onAddressChange(address);
     } catch (err) {
       console.error("Place details error:", err);
@@ -214,23 +212,6 @@ const MapPicker = ({ onLocationSelect, onAddressChange, initialLocation }) => {
       }
     } else if (e.key === "Escape") {
       setShowSuggestions(false);
-    }
-  };
-
-  const handleMapClick = (latlng) => {
-    const loc = [latlng.lat, latlng.lng];
-    setPosition(loc);
-    if (onLocationSelect) onLocationSelect(loc);
-    // Reverse geocode via Google Geocoder
-    if (window.google?.maps) {
-      const geocoder = new window.google.maps.Geocoder();
-      geocoder.geocode({ location: { lat: latlng.lat, lng: latlng.lng } }, (results, status) => {
-        if (status === "OK" && results?.[0]) {
-          const address = results[0].formatted_address;
-          setSearchQuery(address);
-          if (onAddressChange) onAddressChange(address);
-        }
-      });
     }
   };
 
@@ -330,34 +311,20 @@ const MapPicker = ({ onLocationSelect, onAddressChange, initialLocation }) => {
       )}
 
       <div
+        ref={mapDivRef}
         style={{
           height: "300px",
           width: "100%",
           borderRadius: "var(--radius-lg)",
           overflow: "hidden",
           border: "1px solid var(--color-border)",
+          background: "#e8e8e8",
         }}
-      >
-        <MapContainer
-          center={center}
-          zoom={13}
-          style={{ height: "100%", width: "100%" }}
-          zoomControl={true}
-        >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-            maxZoom={19}
-          />
-          <RecenterMap center={center} />
-          <ClickHandler onMapClick={handleMapClick} />
-          {position && <Marker position={position} />}
-        </MapContainer>
-      </div>
+      />
 
       {position && (
         <p style={{ fontSize: "var(--text-xs)", color: "var(--color-success)" }}>
-          ✓ Location pinned: {position[0]?.toFixed(5)}, {position[1]?.toFixed(5)}
+          ✓ Location pinned: {position.lat?.toFixed(5)}, {position.lng?.toFixed(5)}
         </p>
       )}
 
