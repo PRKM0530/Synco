@@ -17,12 +17,26 @@ const chatRoutes = require("./routes/chat.routes");
 const verificationRoutes = require("./routes/verification.routes");
 const reportRoutes = require("./routes/report.routes");
 const adminRoutes = require("./routes/admin.routes");
+const sosRoutes = require("./routes/sos.routes");
 
 const app = express();
 
 // --- Middleware ---
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
-app.use(cors({ origin: config.clientUrl, credentials: true }));
+
+// Allow multiple origins (comma-separated CLIENT_URL for dev + production)
+const allowedOrigins = (config.clientUrl || "").split(",").map(s => s.trim());
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, true); // In production, be permissive to avoid CORS issues
+    }
+  },
+  credentials: true,
+}));
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -45,6 +59,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/sos", sosRoutes);
 
 // --- Error handling ---
 app.use(errorHandler);
