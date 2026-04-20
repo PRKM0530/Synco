@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { notificationAPI } from "../../services/api";
 import { useNavigate } from "react-router-dom";
 import { Bell, Clock, CheckCircle, XCircle, Users, CalendarX, Mail, X, AlertTriangle, Ban } from "lucide-react";
+import { getSocket } from "../../services/socket";
 
 const getNotifIcon = (notif) => {
   const { type, title } = notif;
@@ -17,6 +18,7 @@ const getNotifIcon = (notif) => {
     case "FRIEND_REQUEST": return <Users size={22} color="#3498db" />;
     case "REMINDER":       return <Bell size={22} color="#9b59b6" />;
     case "CANCELLATION":   return <CalendarX size={22} color="#e74c3c" />;
+    case "SOS_ALERT":      return <AlertTriangle size={22} color="#e53e3e" />;
     default:               return <Mail size={22} color="#636e72" />;
   }
 };
@@ -38,6 +40,14 @@ const NotificationsPage = () => {
       }
     };
     fetchNotifications();
+
+    // Real-time notifications
+    const socket = getSocket();
+    const handleNew = (data) => {
+      setNotifications((prev) => [{ ...data, id: data.id || Date.now().toString(), isRead: false }, ...prev]);
+    };
+    socket.on("new-notification", handleNew);
+    return () => socket.off("new-notification", handleNew);
   }, []);
 
   const handleReadClick = async (notif) => {
@@ -62,6 +72,8 @@ const NotificationsPage = () => {
       if (notif.activityId) navigate(`/activities/${notif.activityId}`);
     } else if (notif.type === "FRIEND_REQUEST") {
       navigate("/friends");
+    } else if (notif.type === "SOS_ALERT") {
+      navigate("/map");
     }
   };
 

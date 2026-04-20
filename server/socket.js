@@ -46,6 +46,9 @@ const initializeSocket = (server) => {
     io.on("connection", (socket) => {
     console.log(`🔌 Socket connected: ${socket.id} (user: ${socket.user.id})`);
 
+    // Auto-join personal room for targeted notifications
+    socket.join(`user_${socket.user.id}`);
+
         socket.on("join-activity-room", async (activityId) => {
       try {
         const [activity, member] = await Promise.all([

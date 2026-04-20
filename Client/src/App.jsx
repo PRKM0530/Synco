@@ -3,21 +3,26 @@ import {
   Routes,
   Route,
   Navigate,
+  useNavigate,
 } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Navbar from "./components/layout/Navbar";
 import BottomNav from "./components/layout/BottomNav";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { getSocket } from "./services/socket";
+
+// Lazy-loaded map pages (heavy Google Maps SDK)
+const MapPage = lazy(() => import("./pages/home/MapPage"));
+const CreateActivityPage = lazy(() => import("./pages/activity/CreateActivityPage"));
+const EditActivityPage = lazy(() => import("./pages/activity/EditActivityPage"));
 
 // Pages
 import LoginPage from "./pages/auth/LoginPage";
 import RegisterPage from "./pages/auth/RegisterPage";
 import HomePage from "./pages/home/HomePage";
-import MapPage from "./pages/home/MapPage";
 import ProfilePage from "./pages/profile/ProfilePage";
 import EditProfilePage from "./pages/profile/EditProfilePage";
-import CreateActivityPage from "./pages/activity/CreateActivityPage";
-import EditActivityPage from "./pages/activity/EditActivityPage";
 import ActivityDetailPage from "./pages/activity/ActivityDetailPage";
 import FriendsPage from "./pages/friends/FriendsPage";
 import NotificationsPage from "./pages/notifications/NotificationsPage";
@@ -90,10 +95,30 @@ const GuestRoute = ({ children }) => {
 };
 
 const AppContent = () => {
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  // Listen for real-time SOS notifications
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const socket = getSocket();
+    const handleNotification = (data) => {
+      if (data.type === "SOS_ALERT") {
+        // Show a browser-style toast
+        if (window.confirm(`🚨 ${data.message}\n\nOpen map to see location?`)) {
+          navigate("/map");
+        }
+      }
+    };
+    socket.on("new-notification", handleNotification);
+    return () => socket.off("new-notification", handleNotification);
+  }, [isAuthenticated, navigate]);
+
   return (
     <>
       <Navbar />
       <div className="page-shell">
+        <Suspense fallback={<div style={{display:"flex",justifyContent:"center",marginTop:"100px"}}><span className="spinner" style={{width:40,height:40,borderWidth:4}}></span></div>}>
         <Routes>
           {/* Auth routes — guest only */}
           <Route
@@ -275,6 +300,7 @@ const AppContent = () => {
             }
           />
         </Routes>
+        </Suspense>
       </div>
       <BottomNav />
     </>

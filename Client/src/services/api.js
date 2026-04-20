@@ -136,4 +136,11 @@ export const adminAPI = {
   unbanUser: (userId) => api.post(`/admin/users/${userId}/unban`),
 };
 
+// SOS API
+export const sosAPI = {
+  create: (data) => api.post("/sos", data),
+  deactivate: () => api.delete("/sos"),
+  getActive: (params) => api.get("/sos/active", { params }),
+};
+
 export default api;
