@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { getSocket } from "../../services/socket";
 import { chatAPI } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
-import { MessageSquare, Pin } from "lucide-react";
+import { MessageSquare, Pin, MoreVertical, Trash2 } from "lucide-react";
 
 const ChatRoom = ({ activityId, isHost }) => {
   const { user } = useAuth();
@@ -10,6 +10,7 @@ const ChatRoom = ({ activityId, isHost }) => {
   const [newMessage, setNewMessage] = useState("");
   const [lastReadAt, setLastReadAt] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [openMenuId, setOpenMenuId] = useState(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -49,8 +50,11 @@ const ChatRoom = ({ activityId, isHost }) => {
     });
 
     // Listen for message deletion/pinning updates
-    socket.on("message-deleted", (messageId) => {
-      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    socket.on("message-deleted", (deletedMessage) => {
+      if (!deletedMessage?.id) return;
+      setMessages((prev) =>
+        prev.map((m) => (m.id === deletedMessage.id ? { ...m, ...deletedMessage } : m)),
+      );
     });
 
     socket.on("message-pinned", ({ messageId, isPinned }) => {
@@ -96,19 +100,21 @@ const ChatRoom = ({ activityId, isHost }) => {
         isPinned,
       });
     } catch (err) {
-      alert("Failed to pin message.");
+      alert(err.response?.data?.error || "Failed to pin message.");
     }
   };
 
   const deleteMessage = async (msgId) => {
     if (!window.confirm("Delete this message?")) return;
     try {
-      await chatAPI.deleteMessage(msgId);
-      // Emit to room so everyone removes it instantly
+      const res = await chatAPI.deleteMessage(msgId);
+      const deletedMessage = res.data?.deletedMessage;
+      // Emit to room so everyone updates instantly
       const socket = getSocket();
-      socket.emit("delete-activity-message", { activityId, messageId: msgId });
+      socket.emit("delete-activity-message", { activityId, deletedMessage });
+      setOpenMenuId(null);
     } catch (err) {
-      alert("Failed to delete message.");
+      alert(err.response?.data?.error || "Failed to delete message.");
     }
   };
 
@@ -127,8 +133,6 @@ const ChatRoom = ({ activityId, isHost }) => {
   }
 
   const pinnedMessages = messages.filter((m) => m.isPinned);
-  let unreadDividerRendered = false;
-
   return (
     <div
       className="chat-container"
@@ -243,6 +247,10 @@ const ChatRoom = ({ activityId, isHost }) => {
             return messages.map((msg, index) => {
               const isMe = msg.sender.id === user.id;
               const messageTime = new Date(msg.createdAt);
+              const canDelete = isHost || isMe;
+              const canPin = isHost && msg.type !== "SYSTEM";
+              const canShowMenu = canDelete || canPin;
+              const isDeletedMessage = msg.type === "SYSTEM";
 
               return (
                 <div
@@ -347,28 +355,97 @@ const ChatRoom = ({ activityId, isHost }) => {
                               border: msg.isPinned
                                 ? "1px solid #FDCB6E"
                                 : "none",
+                              fontStyle: isDeletedMessage ? "italic" : "normal",
+                              opacity: isDeletedMessage ? 0.85 : 1,
                             }}
                           >
+                            {msg.isPinned && (
+                              <Pin
+                                size={12}
+                                style={{ marginRight: 6, verticalAlign: "text-bottom", color: "#FDCB6E" }}
+                                title="Pinned message"
+                              />
+                            )}
                             {msg.content}
                           </div>
 
-                          {isHost && (
+                          {canShowMenu && (
                             <div
-                              style={{ display: "flex", gap: "var(--space-1)" }}
+                              style={{ display: "flex", gap: "var(--space-1)", position: "relative" }}
                             >
                               <button
-                                onClick={() => togglePin(msg.id)}
+                                onClick={() => setOpenMenuId((prev) => (prev === msg.id ? null : msg.id))}
                                 style={{
                                   background: "none",
                                   border: "none",
                                   cursor: "pointer",
                                   opacity: 0.6,
-                                  fontSize: "10px",
+                                  padding: 0,
                                 }}
-                                title="Pin Message"
+                                title="Message actions"
                               >
-                                <Pin size={14} />
+                                <MoreVertical size={14} />
                               </button>
+
+                              {openMenuId === msg.id && (
+                                <div
+                                  style={{
+                                    position: "absolute",
+                                    top: "18px",
+                                    right: isMe ? "0" : "auto",
+                                    left: isMe ? "auto" : "0",
+                                    minWidth: "130px",
+                                    background: "var(--color-surface)",
+                                    border: "1px solid var(--color-border)",
+                                    borderRadius: "8px",
+                                    boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+                                    zIndex: 10,
+                                    overflow: "hidden",
+                                  }}
+                                >
+                                  {canPin && (
+                                    <button
+                                      onClick={() => {
+                                        togglePin(msg.id);
+                                        setOpenMenuId(null);
+                                      }}
+                                      style={{
+                                        width: "100%",
+                                        background: "transparent",
+                                        border: "none",
+                                        color: "var(--color-text)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "8px",
+                                        padding: "8px 10px",
+                                        cursor: "pointer",
+                                        fontSize: "12px",
+                                      }}
+                                    >
+                                      <Pin size={13} /> {msg.isPinned ? "Unpin Message" : "Pin Message"}
+                                    </button>
+                                  )}
+                                  {canDelete && !isDeletedMessage && (
+                                    <button
+                                      onClick={() => deleteMessage(msg.id)}
+                                      style={{
+                                        width: "100%",
+                                        background: "transparent",
+                                        border: "none",
+                                        color: "var(--color-danger)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "8px",
+                                        padding: "8px 10px",
+                                        cursor: "pointer",
+                                        fontSize: "12px",
+                                      }}
+                                    >
+                                      <Trash2 size={13} /> Delete Message
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
