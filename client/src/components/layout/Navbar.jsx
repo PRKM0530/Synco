@@ -3,7 +3,7 @@ import { useAuth } from "../../context/AuthContext";
 import SyncoLogo from "../common/SyncoLogo";
 import { useEffect, useState, useRef } from "react";
 import { notificationAPI } from "../../services/api";
-import { Users, ShieldCheck, Bell, X } from "lucide-react";
+import { Users, ShieldCheck, Bell, X, Compass } from "lucide-react";
 
 const Navbar = () => {
   const { user, logout } = useAuth();
@@ -149,16 +149,15 @@ const Navbar = () => {
             {user ? (
               <>
                 <Link
+                  to="/explore"
+                  className="navbar-icon-btn desktop-only"
+                  title="Explore"
+                >
+                  <Compass size={20} className="text-secondary" />
+                </Link>
+                <Link
                   to="/friends"
-                  style={{
-                    textDecoration: "none",
-                    background: "rgba(0,0,0,0.05)",
-                    padding: "6px",
-                    borderRadius: "50%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
+                  className="navbar-icon-btn desktop-only"
                   title="Friends"
                 >
                   <Users size={20} className="text-secondary" />
@@ -186,16 +185,8 @@ const Navbar = () => {
                 )}
                 <Link
                   to="/notifications"
-                  style={{
-                    textDecoration: "none",
-                    background: "rgba(0,0,0,0.05)",
-                    padding: "6px",
-                    borderRadius: "50%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    position: "relative",
-                  }}
+                  className="navbar-icon-btn"
+                  style={{ position: "relative" }}
                   title="Notifications"
                 >
                   <Bell size={20} className="text-secondary" />
@@ -223,7 +214,7 @@ const Navbar = () => {
                     </span>
                   )}
                 </Link>
-                <Link to="/profile" className="navbar-avatar-btn" title="Profile">
+                <Link to="/profile" className="navbar-avatar-btn desktop-only" title="Profile">
                   <div className="avatar avatar--sm">
                     {user.profilePhoto ? (
                       <img src={user.profilePhoto} alt={user.displayName} />

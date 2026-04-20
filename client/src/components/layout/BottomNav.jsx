@@ -1,11 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
+import { Home, Compass, Users, MessageCircle, User } from "lucide-react";
 
 const NAV_ITEMS = [
-  { path: "/", icon: "🏠", label: "Home" },
-  { path: "/map", icon: "🗺️", label: "Map" },
-  { path: "/friends", icon: "👥", label: "Friends" },
-  { path: "/chat", icon: "💬", label: "Chat" },
-  { path: "/profile", icon: "👤", label: "Profile" },
+  { path: "/", icon: <Home size={20} />, label: "Home" },
+  { path: "/explore", icon: <Compass size={20} />, label: "Explore" },
+  { path: "/friends", icon: <Users size={20} />, label: "Friends" },
+  { path: "/chat", icon: <MessageCircle size={20} />, label: "Chat" },
+  { path: "/profile", icon: <User size={20} />, label: "Profile" },
 ];
 
 const BottomNav = () => {

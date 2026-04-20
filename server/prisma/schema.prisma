@@ -37,6 +37,7 @@ model User {
   reportedBy       Report[]               @relation("ReportedUser")
   reports          Report[]               @relation("Reporter")
   trustLogs        TrustLog[]
+  sosSignals       SosSignal[]
 }
 
 model Activity {
@@ -243,6 +244,7 @@ enum NotificationType {
   REMINDER
   FRIEND_REQUEST
   CANCELLATION
+  SOS_ALERT
 }
 
 enum ReportStatus {
@@ -256,6 +258,17 @@ enum VerificationChoice {
   YES_ATTENDED
   NO_DID_NOT_ATTEND
   NOT_CONDUCTED
+}
+
+model SosSignal {
+  id        String   @id @default(uuid())
+  userId    String
+  latitude  Float
+  longitude Float
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 enum FeedbackType {

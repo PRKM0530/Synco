@@ -67,6 +67,7 @@ export const userAPI = {
 export const activityAPI = {
   createActivity: (data) => api.post("/activities", data),
   getActivities: (params) => api.get("/activities", { params }),
+  getMyActivities: (params) => api.get("/activities/mine", { params }),
   getActivityById: (id) => api.get(`/activities/${id}`),
   updateActivity: (id, data) => api.put(`/activities/${id}`, data),
   deleteActivity: (id) => api.delete(`/activities/${id}`),
@@ -133,6 +134,16 @@ export const adminAPI = {
     api.put(`/admin/reports/${id}`, { status, adminNotes }),
   banUser: (userId) => api.post(`/admin/users/${userId}/ban`),
   unbanUser: (userId) => api.post(`/admin/users/${userId}/unban`),
+};
+
+// SOS API
+export const sosAPI = {
+  create: (data) => api.post("/sos", data),
+  deactivate: () => api.delete("/sos"),
+  getMine: () => api.get("/sos/mine"),
+  getActive: (params) => api.get("/sos/active", { params }),
+  completeById: (id) => api.patch(`/sos/${id}/complete`),
+  deleteById: (id) => api.delete(`/sos/${id}`),
 };
 
 export default api;

@@ -4,20 +4,24 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Navbar from "./components/layout/Navbar";
 import BottomNav from "./components/layout/BottomNav";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { userAPI } from "./services/api";
+
+// Lazy-loaded map pages (heavy Google Maps SDK)
+const MapPage = lazy(() => import("./pages/home/MapPage"));
+const CreateActivityPage = lazy(() => import("./pages/activity/CreateActivityPage"));
+const EditActivityPage = lazy(() => import("./pages/activity/EditActivityPage"));
 
 // Pages
 import LoginPage from "./pages/auth/LoginPage";
 import RegisterPage from "./pages/auth/RegisterPage";
 import HomePage from "./pages/home/HomePage";
-import MapPage from "./pages/home/MapPage";
 import ProfilePage from "./pages/profile/ProfilePage";
 import EditProfilePage from "./pages/profile/EditProfilePage";
-import CreateActivityPage from "./pages/activity/CreateActivityPage";
-import EditActivityPage from "./pages/activity/EditActivityPage";
 import ActivityDetailPage from "./pages/activity/ActivityDetailPage";
 import FriendsPage from "./pages/friends/FriendsPage";
 import NotificationsPage from "./pages/notifications/NotificationsPage";
@@ -26,6 +30,7 @@ import DirectMessagePage from "./pages/chat/DirectMessagePage";
 import VerifyAttendancePage from "./pages/activity/VerifyAttendancePage";
 import HostRosterPage from "./pages/activity/HostRosterPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import ExplorePage from "./pages/explore/ExplorePage";
 import VerifyOTPPage from "./pages/auth/VerifyOTPPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
@@ -89,10 +94,33 @@ const GuestRoute = ({ children }) => {
 };
 
 const AppContent = () => {
+  const { isAuthenticated } = useAuth();
+
+  // Keep user location updated for nearby SOS matching.
+  useEffect(() => {
+    if (!isAuthenticated || !navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          await userAPI.updateProfile({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+        } catch (err) {
+          console.warn("Location sync failed:", err?.message || err);
+        }
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 120000 },
+    );
+  }, [isAuthenticated]);
+
   return (
     <>
       <Navbar />
       <div className="page-shell">
+        <Suspense fallback={<div style={{display:"flex",justifyContent:"center",marginTop:"100px"}}><span className="spinner" style={{width:40,height:40,borderWidth:4}}></span></div>}>
         <Routes>
           {/* Auth routes — guest only */}
           <Route
@@ -166,6 +194,14 @@ const AppContent = () => {
             element={
               <ProtectedRoute>
                 <MapPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/explore"
+            element={
+              <ProtectedRoute>
+                <ExplorePage />
               </ProtectedRoute>
             }
           />
@@ -266,6 +302,7 @@ const AppContent = () => {
             }
           />
         </Routes>
+        </Suspense>
       </div>
       <BottomNav />
     </>
