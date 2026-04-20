@@ -84,7 +84,7 @@ const ChatInboxPage = ({ isEmbedded = false }) => {
                   className="btn btn--primary"
                   style={{ marginTop: "var(--space-4)" }}
                   onClick={() =>
-                    navigate(isEmbedded ? "/friends?tab=friends" : "/map")
+                    navigate(isEmbedded ? "/friends?tab=friends" : "/friends")
                   }
                 >
                   {isEmbedded ? "Go to Friends" : "Discover Users"}
