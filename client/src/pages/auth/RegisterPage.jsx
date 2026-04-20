@@ -17,6 +17,7 @@ const RegisterPage = () => {
   const [localError, setLocalError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [acceptedDataUse, setAcceptedDataUse] = useState(false);
 
   const handleChange = (e) => {
     clearError();
@@ -34,6 +35,11 @@ const RegisterPage = () => {
 
     if (form.password.length < 6) {
       setLocalError("Password must be at least 6 characters.");
+      return;
+    }
+
+    if (!acceptedDataUse) {
+      setLocalError("Please accept the data usage notice to continue.");
       return;
     }
 
@@ -187,6 +193,32 @@ const RegisterPage = () => {
               </button>
             </div>
           </div>
+
+          <label
+            htmlFor="register-consent"
+            style={{
+              display: "flex",
+              gap: "8px",
+              alignItems: "flex-start",
+              fontSize: "12px",
+              color: "var(--color-text-muted)",
+              marginTop: "-4px",
+            }}
+          >
+            <input
+              id="register-consent"
+              type="checkbox"
+              checked={acceptedDataUse}
+              onChange={(e) => {
+                setAcceptedDataUse(e.target.checked);
+                if (e.target.checked) setLocalError("");
+              }}
+              style={{ marginTop: "2px" }}
+            />
+            <span>
+              This app uses your location to show nearby activities and your email for login, verification, and important account updates.
+            </span>
+          </label>
 
           <button
             type="submit"
