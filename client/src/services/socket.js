@@ -1,13 +1,8 @@
 import { io } from "socket.io-client";
 
-// Connect to the same host+port the page was loaded from.
-// Vite proxies /socket.io → http://localhost:5000, so this works for:
-//   - Local users:  connects via Vite proxy to localhost:5000
-//   - Remote users via port-forward: their browser sends /socket.io to
-//     the forwarded host, Vite's proxy on that machine routes it to the backend.
-//
-// We use window.location.origin so the URL always matches whoever opened the page.
-const SOCKET_URL = window.location.origin;
+// In production, the socket server is on a different domain (Render).
+// In development, Vite proxies /socket.io to localhost:5000.
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin;
 
 let socket;
 
