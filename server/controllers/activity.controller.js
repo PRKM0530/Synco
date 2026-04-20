@@ -327,7 +327,7 @@ const updateActivity = async (req, res, next) => {
 
 /**
  * Cancel and permanently delete an activity.
- * Only the host (or an admin) can cancel. Typically used before the event starts.
+ * Only the original host (or an admin) can cancel. Typically used before the event starts.
  * Cascading deletes in the schema remove members, join-requests, and chat room automatically.
  */
 const deleteActivity = async (req, res, next) => {
@@ -338,14 +338,11 @@ const deleteActivity = async (req, res, next) => {
     if (!activity)
       return res.status(404).json({ error: "Activity not found." });
 
-    // Allow co-hosts to delete as well
-    const isCoHost = await prisma.activityMember.findFirst({
-      where: { activityId: id, userId: req.user.id, isCoHost: true },
-    });
-    if (activity.hostId !== req.user.id && !isCoHost && req.user.role !== "ADMIN") {
+    // Co-hosts are intentionally not allowed to delete activities.
+    if (activity.hostId !== req.user.id && req.user.role !== "ADMIN") {
       return res
         .status(403)
-        .json({ error: "Only the host can cancel this activity." });
+        .json({ error: "Only the original host can cancel this activity." });
     }
 
     await prisma.activity.delete({ where: { id } });
@@ -389,7 +386,7 @@ const toggleCoHost = async (req, res, next) => {
     });
 
     res.json({
-      message: updated.isCoHost ? "User promoted to host." : "User demoted from host.",
+      message: updated.isCoHost ? "User promoted to co-host." : "User demoted from co-host.",
       isCoHost: updated.isCoHost,
     });
   } catch (err) {

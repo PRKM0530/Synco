@@ -45,10 +45,10 @@ router.post(
   createActivity,
 );
 
-// PUT /api/activities/:id — edit activity (host only)
+// PUT /api/activities/:id — edit activity (host/co-host/admin)
 router.put("/:id", auth, updateActivity);
 
-// DELETE /api/activities/:id — cancel/delete activity (host only)
+// DELETE /api/activities/:id — cancel/delete activity (original host/admin only)
 router.delete("/:id", auth, deleteActivity);
 
 // PUT /api/activities/:id/cohosts/:memberUserId — promote/demote a member to host (original host only)
