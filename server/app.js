@@ -17,6 +17,7 @@ const chatRoutes = require("./routes/chat.routes");
 const verificationRoutes = require("./routes/verification.routes");
 const reportRoutes = require("./routes/report.routes");
 const adminRoutes = require("./routes/admin.routes");
+const sosRoutes = require("./routes/sos.routes");
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/sos", sosRoutes);
 
 // --- Error handling ---
 app.use(errorHandler);
