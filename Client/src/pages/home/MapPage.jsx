@@ -25,12 +25,23 @@ const getRadiusFromBounds = (map) => {
   return Math.ceil(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
+const DEFAULT_CENTER = { lat: 28.6139, lng: 77.209 };
+
+const getInitialCenter = () => {
+  try {
+    const cached = localStorage.getItem("synco_last_location");
+    if (cached) return JSON.parse(cached);
+  } catch (_) {}
+  return null; // no cache yet
+};
+
 const MapPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [activities, setActivities] = useState([]);
   const [sosSignals, setSosSignals] = useState([]);
-  const [center, setCenter] = useState(null);
+  // null means we have no location yet (first ever visit)
+  const [center, setCenter] = useState(getInitialCenter);
   const [loading, setLoading] = useState(true);
   const [activityCount, setActivityCount] = useState(0);
   const [sosActionId, setSosActionId] = useState(null);
@@ -53,23 +64,53 @@ const MapPage = () => {
   const userMarkerRef = useRef(null);
   const searchWrapperRef = useRef(null);
 
+  // Pre-load Google Maps SDK in parallel with geolocation.
+  useEffect(() => {
+    loadGoogleMaps();
+  }, []);
+
   // Get user location
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          setLoading(false);
-        },
-        () => {
-          setCenter({ lat: 28.6139, lng: 77.209 });
-          setLoading(false);
-        },
-      );
-    } else {
-      setCenter({ lat: 28.6139, lng: 77.209 });
+    if (!navigator.geolocation) {
+      // No geolocation support — fall back to default only if no cache
+      if (!center) setCenter(DEFAULT_CENTER);
       setLoading(false);
+      return;
     }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const userLocation = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        };
+
+        // Save for next visit so map opens instantly on their area
+        try {
+          localStorage.setItem("synco_last_location", JSON.stringify(userLocation));
+        } catch (_) {}
+
+        // If map is already initialised (cached center was used),
+        // just pan silently — no flicker, no reinit
+        if (mapRef.current) {
+          mapRef.current.panTo(userLocation);
+          if (userMarkerRef.current) {
+            userMarkerRef.current.position = userLocation;
+          }
+        } else {
+          // Map not init yet (first visit, was waiting for center)
+          setCenter(userLocation);
+        }
+
+        setLoading(false);
+      },
+      () => {
+        // Denied or timed out — use cache or hardcoded fallback
+        if (!center) setCenter(DEFAULT_CENTER);
+        setLoading(false);
+      },
+      { timeout: 5000 },
+    );
   }, []);
 
   // Fetch activities for visible bounds (debounced)
@@ -246,7 +287,8 @@ const MapPage = () => {
 
   // Init Google Map when center is ready
   useEffect(() => {
-    if (!center || !mapDivRef.current) return;
+    if (!center) return; // waiting for geolocation on first visit
+    if (!mapDivRef.current) return;
     let cancelled = false;
 
     loadGoogleMaps().then(() => {
@@ -453,7 +495,7 @@ const MapPage = () => {
     };
   }, [navigate, handleRemoveOwnSos]);
 
-  if (!center && loading) {
+  if (!center) {
     return (
       <div
         className="page-content"
