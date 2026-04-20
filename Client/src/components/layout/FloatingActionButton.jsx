@@ -33,12 +33,13 @@ const FloatingActionButton = () => {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
-          await sosAPI.create({
+          const res = await sosAPI.create({
             latitude: pos.coords.latitude,
             longitude: pos.coords.longitude,
           });
+          const notifiedCount = res.data?.notifiedCount || 0;
           setOpen(false);
-          alert("🚨 SOS signal sent! Others nearby can see your location on the map.");
+          alert(`🚨 SOS sent. ${notifiedCount} nearby user${notifiedCount === 1 ? "" : "s"} notified.`);
         } catch (err) {
           console.error("SOS error:", err);
           alert("Failed to send SOS. Please try again.");

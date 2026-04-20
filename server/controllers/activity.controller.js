@@ -88,8 +88,21 @@ const createActivity = async (req, res, next) => {
  */
 const getActivities = async (req, res, next) => {
   try {
-    const { lat, lng, radius = 50, category, search, date, visibility } = req.query;
+    const {
+      lat,
+      lng,
+      radius = 50,
+      category,
+      search,
+      date,
+      visibility,
+      offset = 0,
+      limit = 20,
+    } = req.query;
     const userId = req.user?.id;
+
+    const parsedOffset = Math.max(parseInt(offset, 10) || 0, 0);
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 20);
 
 
     let where = {
@@ -182,32 +195,79 @@ const getActivities = async (req, res, next) => {
       where.date = { gt: now };
     }
 
-    const activities = await prisma.activity.findMany({
-      where,
-      include: {
-        host: { select: { id: true, displayName: true, profilePhoto: true } },
-        _count: { select: { members: true } },
-      },
-      orderBy: { date: "asc" },
-      take: 100,
-    });
+    const include = {
+      host: { select: { id: true, displayName: true, profilePhoto: true } },
+      _count: { select: { members: true } },
+    };
 
-    let filteredActivities = activities;
+    // Distance-based ordering requires in-memory sort, so paginate after distance calc.
     if (lat && lng) {
       const userLat = parseFloat(lat);
       const userLng = parseFloat(lng);
       const r = parseFloat(radius);
 
-      filteredActivities = activities
+      if (!Number.isFinite(userLat) || !Number.isFinite(userLng) || !Number.isFinite(r)) {
+        return res.status(400).json({ error: "Invalid lat/lng/radius query params." });
+      }
+
+      const latDelta = r / 111.0;
+      const lngDelta = r / (111.0 * Math.cos((userLat * Math.PI) / 180));
+      const geoWhere = {
+        ...where,
+        latitude: {
+          gte: userLat - latDelta,
+          lte: userLat + latDelta,
+        },
+        longitude: {
+          gte: userLng - lngDelta,
+          lte: userLng + lngDelta,
+        },
+      };
+
+      const activities = await prisma.activity.findMany({
+        where: geoWhere,
+        include,
+        orderBy: { date: "asc" },
+      });
+
+      const filteredActivities = activities
         .map((act) => ({
           ...act,
           distance: getDistance(userLat, userLng, act.latitude, act.longitude),
         }))
         .filter((act) => act.distance <= r)
         .sort((a, b) => a.distance - b.distance);
+
+      const pagedActivities = filteredActivities.slice(
+        parsedOffset,
+        parsedOffset + parsedLimit,
+      );
+
+      return res.json({
+        activities: pagedActivities,
+        total: filteredActivities.length,
+        hasMore: parsedOffset + pagedActivities.length < filteredActivities.length,
+        nextOffset: parsedOffset + pagedActivities.length,
+      });
     }
 
-    res.json({ activities: filteredActivities });
+    const [total, activities] = await prisma.$transaction([
+      prisma.activity.count({ where }),
+      prisma.activity.findMany({
+        where,
+        include,
+        orderBy: { date: "asc" },
+        skip: parsedOffset,
+        take: parsedLimit,
+      }),
+    ]);
+
+    res.json({
+      activities,
+      total,
+      hasMore: parsedOffset + activities.length < total,
+      nextOffset: parsedOffset + activities.length,
+    });
   } catch (err) {
     next(err);
   }
@@ -404,34 +464,59 @@ const toggleCoHost = async (req, res, next) => {
 const getMyActivities = async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const {
+      hostedOffset = 0,
+      joinedOffset = 0,
+      limit = 10,
+    } = req.query;
 
-    // Activities this user created
-    const hosted = await prisma.activity.findMany({
-      where: { hostId: userId },
-      include: {
-        host: { select: { id: true, displayName: true, profilePhoto: true } },
-        _count: { select: { members: true } },
+    const parsedHostedOffset = Math.max(parseInt(hostedOffset, 10) || 0, 0);
+    const parsedJoinedOffset = Math.max(parseInt(joinedOffset, 10) || 0, 0);
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 20);
+
+    const hostedWhere = { hostId: userId };
+    const joinedWhere = {
+      hostId: { not: userId },
+      members: {
+        some: { userId },
       },
-      orderBy: { date: "desc" },
-    });
+    };
 
-    // Activities this user joined (approved member, not host)
-    const memberships = await prisma.activityMember.findMany({
-      where: { userId },
-      select: { activityId: true },
-    });
-    const joinedIds = memberships.map((m) => m.activityId);
+    const [hostedTotal, hosted, joinedTotal, joined] = await prisma.$transaction([
+      prisma.activity.count({ where: hostedWhere }),
+      prisma.activity.findMany({
+        where: hostedWhere,
+        include: {
+          host: { select: { id: true, displayName: true, profilePhoto: true } },
+          _count: { select: { members: true } },
+        },
+        orderBy: { date: "desc" },
+        skip: parsedHostedOffset,
+        take: parsedLimit,
+      }),
+      prisma.activity.count({ where: joinedWhere }),
+      prisma.activity.findMany({
+        where: joinedWhere,
+        include: {
+          host: { select: { id: true, displayName: true, profilePhoto: true } },
+          _count: { select: { members: true } },
+        },
+        orderBy: { date: "desc" },
+        skip: parsedJoinedOffset,
+        take: parsedLimit,
+      }),
+    ]);
 
-    const joined = await prisma.activity.findMany({
-      where: { id: { in: joinedIds }, hostId: { not: userId } },
-      include: {
-        host: { select: { id: true, displayName: true, profilePhoto: true } },
-        _count: { select: { members: true } },
-      },
-      orderBy: { date: "desc" },
+    res.json({
+      hosted,
+      hostedTotal,
+      hostedHasMore: parsedHostedOffset + hosted.length < hostedTotal,
+      hostedNextOffset: parsedHostedOffset + hosted.length,
+      joined,
+      joinedTotal,
+      joinedHasMore: parsedJoinedOffset + joined.length < joinedTotal,
+      joinedNextOffset: parsedJoinedOffset + joined.length,
     });
-
-    res.json({ hosted, joined });
   } catch (err) {
     next(err);
   }

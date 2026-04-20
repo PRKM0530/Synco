@@ -44,7 +44,19 @@ const NotificationsPage = () => {
     // Real-time notifications
     const socket = getSocket();
     const handleNew = (data) => {
-      setNotifications((prev) => [{ ...data, id: data.id || Date.now().toString(), isRead: false }, ...prev]);
+      setNotifications((prev) => {
+        const incomingId = data.id || Date.now().toString();
+        if (prev.some((n) => n.id === incomingId)) return prev;
+        return [
+          {
+            ...data,
+            id: incomingId,
+            createdAt: data.createdAt || new Date().toISOString(),
+            isRead: false,
+          },
+          ...prev,
+        ];
+      });
     };
     socket.on("new-notification", handleNew);
     return () => socket.off("new-notification", handleNew);

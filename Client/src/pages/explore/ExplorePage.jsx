@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { activityAPI } from "../../services/api";
 import ActivityCard from "../../components/activity/ActivityCard";
@@ -8,50 +8,127 @@ import { CATEGORIES } from "../../utils/categories";
 import { Search, Sparkles, SlidersHorizontal } from "lucide-react";
 import FloatingActionButton from "../../components/layout/FloatingActionButton";
 
+const EXPLORE_PAGE_SIZE = 12;
+
 const ExplorePage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const categoryFilter = searchParams.get("category");
 
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const locationRef = useRef(null);
+  const queryVersionRef = useRef(0);
+  const loadMoreRef = useRef(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchQuery), 500);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  useEffect(() => {
-    const fetchActivities = async (loc) => {
-      setLoading(true);
-      try {
-        const params = loc ? { lat: loc.lat, lng: loc.lng, radius: 999 } : {};
-        if (categoryFilter) params.category = categoryFilter;
-        if (debouncedSearch) params.search = debouncedSearch;
-        if (dateFilter) params.date = dateFilter;
-        params.visibility = "PUBLIC";
+  const fetchExploreActivities = async ({ reset = false, locationOverride, queryVersion } = {}) => {
+    const version = queryVersion ?? queryVersionRef.current;
+    const effectiveLocation = locationOverride !== undefined ? locationOverride : locationRef.current;
+    const nextOffset = reset ? 0 : offset;
 
-        const res = await activityAPI.getActivities(params);
-        setActivities(res.data.activities || []);
-      } catch (err) {
-        console.error("Failed to fetch explore activities", err);
-      } finally {
-        setLoading(false);
+    if (reset) setLoading(true);
+    else setLoadingMore(true);
+
+    try {
+      const params = effectiveLocation
+        ? { lat: effectiveLocation.lat, lng: effectiveLocation.lng, radius: 999 }
+        : {};
+
+      if (categoryFilter) params.category = categoryFilter;
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (dateFilter) params.date = dateFilter;
+      params.visibility = "PUBLIC";
+      params.offset = nextOffset;
+      params.limit = EXPLORE_PAGE_SIZE;
+
+      const res = await activityAPI.getActivities(params);
+      if (version !== queryVersionRef.current) return;
+
+      const fetched = res.data.activities || [];
+      setActivities((prev) => {
+        if (reset) return fetched;
+        const merged = new Map(prev.map((item) => [item.id, item]));
+        fetched.forEach((item) => merged.set(item.id, item));
+        return Array.from(merged.values());
+      });
+
+      const consumed = nextOffset + fetched.length;
+      setOffset(consumed);
+      setHasMore(Boolean(res.data.hasMore));
+    } catch (err) {
+      console.error("Failed to fetch explore activities", err);
+      if (reset) {
+        setActivities([]);
+        setHasMore(false);
       }
-    };
+    } finally {
+      if (version === queryVersionRef.current) {
+        if (reset) setLoading(false);
+        else setLoadingMore(false);
+      }
+    }
+  };
 
-    fetchActivities(null);
+  useEffect(() => {
+    let cancelled = false;
+    const queryVersion = queryVersionRef.current + 1;
+    queryVersionRef.current = queryVersion;
+    locationRef.current = null;
+    setOffset(0);
+    setHasMore(false);
+
+    fetchExploreActivities({ reset: true, locationOverride: null, queryVersion });
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => fetchActivities({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (pos) => {
+          if (cancelled || queryVersion !== queryVersionRef.current) return;
+          const nextLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          locationRef.current = nextLocation;
+          fetchExploreActivities({ reset: true, locationOverride: nextLocation, queryVersion });
+        },
         () => {},
         { timeout: 5000 },
       );
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [categoryFilter, debouncedSearch, dateFilter]);
+
+  const loadMoreExploreActivities = () => {
+    if (loading || loadingMore || !hasMore) return;
+    fetchExploreActivities({ reset: false });
+  };
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasMore || loading || loadingMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadMoreExploreActivities();
+        }
+      },
+      { rootMargin: "220px 0px" },
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, offset]);
 
   const handleCategoryClick = (catLabel) => {
     if (categoryFilter === catLabel) {
@@ -161,11 +238,26 @@ const ExplorePage = () => {
             <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }}></span>
           </div>
         ) : activities.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)", opacity: loading ? 0.6 : 1, transition: "opacity 0.2s" }}>
-            {activities.map((activity) => (
-              <ActivityCard key={activity.id} activity={activity} />
-            ))}
-          </div>
+          <>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)", opacity: loading ? 0.6 : 1, transition: "opacity 0.2s" }}>
+              {activities.map((activity) => (
+                <ActivityCard key={activity.id} activity={activity} />
+              ))}
+            </div>
+
+            {hasMore && (
+              <div style={{ display: "flex", justifyContent: "center", marginTop: "var(--space-5)" }}>
+                <div ref={loadMoreRef} style={{ width: 1, height: 1, opacity: 0, pointerEvents: "none" }} />
+                <button
+                  className="btn btn--secondary"
+                  onClick={loadMoreExploreActivities}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? "Loading more..." : "Load More Activities"}
+                </button>
+              </div>
+            )}
+          </>
         ) : (
           <div className="empty-state">
             <div className="empty-state-icon"><SyncoLogo size={64} /></div>

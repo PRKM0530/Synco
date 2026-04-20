@@ -1,13 +1,15 @@
-import { useState, useEffect } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { activityAPI } from "../../services/api";
+import { activityAPI, sosAPI } from "../../services/api";
 import ActivityCard from "../../components/activity/ActivityCard";
 import SyncoLogo from "../../components/common/SyncoLogo";
 import OnboardingModal from "../../components/profile/OnboardingModal";
 
-import { Sparkles, Search, Calendar, Users } from "lucide-react";
+import { Sparkles, Search, Users, AlertTriangle, Bell } from "lucide-react";
 import FloatingActionButton from "../../components/layout/FloatingActionButton";
+
+const FOR_YOU_PAGE_SIZE = 10;
 
 const TABS = [
   { key: "foryou", label: "For You" },
@@ -24,15 +26,52 @@ const HomePage = () => {
   // For You state
   const [nearbyActivities, setNearbyActivities] = useState([]);
   const [nearbyLoading, setNearbyLoading] = useState(true);
+  const [nearbyLoadingMore, setNearbyLoadingMore] = useState(false);
+  const [nearbyOffset, setNearbyOffset] = useState(0);
+  const [nearbyHasMore, setNearbyHasMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [visibilityFilter, setVisibilityFilter] = useState("PUBLIC");
+  const nearbyLocationRef = useRef(null);
+  const nearbyQueryVersionRef = useRef(0);
+  const nearbyLoadedRef = useRef(false);
+  const nearbyCacheKeyRef = useRef("");
+  const nearbyLoadMoreRef = useRef(null);
 
   // Your Activity state
   const [hostedActivities, setHostedActivities] = useState([]);
   const [joinedActivities, setJoinedActivities] = useState([]);
+  const [hostedOffset, setHostedOffset] = useState(0);
+  const [hostedHasMore, setHostedHasMore] = useState(false);
+  const [hostedLoadingMore, setHostedLoadingMore] = useState(false);
+  const [joinedOffset, setJoinedOffset] = useState(0);
+  const [joinedHasMore, setJoinedHasMore] = useState(false);
+  const [joinedLoadingMore, setJoinedLoadingMore] = useState(false);
+  const [mySosSignals, setMySosSignals] = useState([]);
   const [myLoading, setMyLoading] = useState(false);
+  const [sosActionId, setSosActionId] = useState(null);
+  const myActivityLoadedRef = useRef(false);
+  const [notificationPermission, setNotificationPermission] = useState(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
+    return window.Notification.permission;
+  });
+
+  // Reset tab caches when authenticated user changes.
+  useEffect(() => {
+    nearbyLoadedRef.current = false;
+    nearbyCacheKeyRef.current = "";
+    myActivityLoadedRef.current = false;
+    setHostedActivities([]);
+    setJoinedActivities([]);
+    setHostedOffset(0);
+    setHostedHasMore(false);
+    setHostedLoadingMore(false);
+    setJoinedOffset(0);
+    setJoinedHasMore(false);
+    setJoinedLoadingMore(false);
+    setMySosSignals([]);
+  }, [user?.id]);
 
   // Debounce search
   useEffect(() => {
@@ -53,46 +92,252 @@ const HomePage = () => {
     setShowOnboarding(false);
   };
 
+  const fetchNearbyActivities = async ({ reset = false, locationOverride, queryVersion } = {}) => {
+    const version = queryVersion ?? nearbyQueryVersionRef.current;
+    const effectiveLocation = locationOverride !== undefined ? locationOverride : nearbyLocationRef.current;
+    const offsetValue = reset ? 0 : nearbyOffset;
+
+    if (reset) setNearbyLoading(true);
+    else setNearbyLoadingMore(true);
+
+    try {
+      const params = effectiveLocation
+        ? { lat: effectiveLocation.lat, lng: effectiveLocation.lng, radius: 50 }
+        : {};
+
+      if (debouncedSearchQuery) params.search = debouncedSearchQuery;
+      if (dateFilter) params.date = dateFilter;
+      if (visibilityFilter) params.visibility = visibilityFilter;
+      params.offset = offsetValue;
+      params.limit = FOR_YOU_PAGE_SIZE;
+
+      const res = await activityAPI.getActivities(params);
+      if (version !== nearbyQueryVersionRef.current) return;
+
+      const fetched = res.data.activities || [];
+      setNearbyActivities((prev) => {
+        if (reset) return fetched;
+        const merged = new Map(prev.map((item) => [item.id, item]));
+        fetched.forEach((item) => merged.set(item.id, item));
+        return Array.from(merged.values());
+      });
+
+      if (reset) {
+        nearbyLoadedRef.current = true;
+      }
+
+      const nextOffset = offsetValue + fetched.length;
+      setNearbyOffset(nextOffset);
+      setNearbyHasMore(Boolean(res.data.hasMore));
+    } catch (err) {
+      console.error("Failed to fetch activities", err);
+      if (reset) {
+        setNearbyActivities([]);
+        setNearbyHasMore(false);
+      }
+    } finally {
+      if (version === nearbyQueryVersionRef.current) {
+        if (reset) setNearbyLoading(false);
+        else setNearbyLoadingMore(false);
+      }
+    }
+  };
+
+  const refreshMySos = async () => {
+    const sosRes = await sosAPI.getMine();
+    setMySosSignals(sosRes.data.signals || []);
+  };
+
+  const requestNotificationPermission = async () => {
+    if (!("Notification" in window)) {
+      alert("Browser notifications are not supported on this device.");
+      return;
+    }
+    try {
+      const permission = await window.Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission === "granted") {
+        alert("Notifications enabled. You will now receive SOS alerts.");
+      } else {
+        alert("Notifications are blocked. Please allow them in browser site settings.");
+      }
+    } catch (err) {
+      console.error("Notification permission error:", err);
+      alert("Unable to enable notifications right now.");
+    }
+  };
+
+  const handleCompleteSos = async (id) => {
+    if (sosActionId) return;
+    setSosActionId(id);
+    try {
+      await sosAPI.completeById(id);
+      await refreshMySos();
+    } catch (err) {
+      console.error("Failed to complete SOS:", err);
+      alert("Failed to complete SOS. Please try again.");
+    } finally {
+      setSosActionId(null);
+    }
+  };
+
+  const handleRemoveSos = async (id) => {
+    if (sosActionId) return;
+    if (!window.confirm("Remove this SOS entry?")) return;
+    setSosActionId(id);
+    try {
+      await sosAPI.deleteById(id);
+      setMySosSignals((prev) => prev.filter((s) => s.id !== id));
+    } catch (err) {
+      console.error("Failed to remove SOS:", err);
+      alert("Failed to remove SOS entry. Please try again.");
+    } finally {
+      setSosActionId(null);
+    }
+  };
+
   // Fetch nearby activities for "For You"
   useEffect(() => {
     if (activeTab !== "foryou") return;
 
-    const fetchNearby = (loc) => {
-      setNearbyLoading(true);
-      const params = loc ? { lat: loc.lat, lng: loc.lng, radius: 50 } : {};
-      if (debouncedSearchQuery) params.search = debouncedSearchQuery;
-      if (dateFilter) params.date = dateFilter;
-      if (visibilityFilter) params.visibility = visibilityFilter;
+    const currentCacheKey = `${debouncedSearchQuery}|${dateFilter}|${visibilityFilter}`;
+    const isSameQuery = nearbyCacheKeyRef.current === currentCacheKey;
 
-      activityAPI.getActivities(params)
-        .then((res) => setNearbyActivities(res.data.activities))
-        .catch((err) => console.error("Failed to fetch activities", err))
-        .finally(() => setNearbyLoading(false));
-    };
+    // Keep tab data in memory when user switches tabs and comes back.
+    if (isSameQuery && nearbyLoadedRef.current) {
+      return;
+    }
 
-    // Load immediately, then re-fetch with location
-    fetchNearby(null);
+    nearbyCacheKeyRef.current = currentCacheKey;
+    nearbyLoadedRef.current = false;
+
+    let cancelled = false;
+    const queryVersion = nearbyQueryVersionRef.current + 1;
+    nearbyQueryVersionRef.current = queryVersion;
+    nearbyLocationRef.current = null;
+    setNearbyOffset(0);
+    setNearbyHasMore(false);
+
+    fetchNearbyActivities({ reset: true, locationOverride: null, queryVersion });
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => fetchNearby({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (pos) => {
+          if (cancelled || queryVersion !== nearbyQueryVersionRef.current) return;
+          const nextLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          nearbyLocationRef.current = nextLocation;
+          fetchNearbyActivities({ reset: true, locationOverride: nextLocation, queryVersion });
+        },
         () => {},
         { timeout: 5000 },
       );
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeTab, debouncedSearchQuery, dateFilter, visibilityFilter]);
+
+  const loadMoreNearbyActivities = () => {
+    if (nearbyLoading || nearbyLoadingMore || !nearbyHasMore || activeTab !== "foryou") return;
+    fetchNearbyActivities({ reset: false });
+  };
+
+  useEffect(() => {
+    if (activeTab !== "foryou") return;
+    const target = nearbyLoadMoreRef.current;
+    if (!target || !nearbyHasMore || nearbyLoading || nearbyLoadingMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadMoreNearbyActivities();
+        }
+      },
+      { rootMargin: "220px 0px" },
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [activeTab, nearbyHasMore, nearbyLoading, nearbyLoadingMore, nearbyOffset]);
 
   // Fetch user's activities for "Your Activity"
   useEffect(() => {
     if (activeTab !== "myactivity") return;
+    if (myActivityLoadedRef.current) return;
+
     setMyLoading(true);
-    activityAPI.getMyActivities()
-      .then((res) => {
-        setHostedActivities(res.data.hosted || []);
-        setJoinedActivities(res.data.joined || []);
+    Promise.all([activityAPI.getMyActivities({ limit: 10 }), sosAPI.getMine()])
+      .then(([activitiesRes, sosRes]) => {
+        const hosted = activitiesRes.data.hosted || [];
+        const joined = activitiesRes.data.joined || [];
+
+        setHostedActivities(hosted);
+        setJoinedActivities(joined);
+        setHostedHasMore(Boolean(activitiesRes.data.hostedHasMore));
+        setHostedOffset(activitiesRes.data.hostedNextOffset ?? hosted.length);
+        setJoinedHasMore(Boolean(activitiesRes.data.joinedHasMore));
+        setJoinedOffset(activitiesRes.data.joinedNextOffset ?? joined.length);
+        setMySosSignals(sosRes.data.signals || []);
+        myActivityLoadedRef.current = true;
       })
       .catch((err) => console.error("Failed to fetch my activities", err))
       .finally(() => setMyLoading(false));
   }, [activeTab]);
+
+  const loadMoreHosted = async () => {
+    if (hostedLoadingMore || !hostedHasMore) return;
+
+    setHostedLoadingMore(true);
+    try {
+      const res = await activityAPI.getMyActivities({
+        hostedOffset,
+        joinedOffset,
+        limit: 10,
+      });
+
+      const fetchedHosted = res.data.hosted || [];
+      setHostedActivities((prev) => {
+        const merged = new Map(prev.map((item) => [item.id, item]));
+        fetchedHosted.forEach((item) => merged.set(item.id, item));
+        return Array.from(merged.values());
+      });
+
+      setHostedHasMore(Boolean(res.data.hostedHasMore));
+      setHostedOffset(res.data.hostedNextOffset ?? hostedOffset + fetchedHosted.length);
+    } catch (err) {
+      console.error("Failed to load more hosted activities", err);
+    } finally {
+      setHostedLoadingMore(false);
+    }
+  };
+
+  const loadMoreJoined = async () => {
+    if (joinedLoadingMore || !joinedHasMore) return;
+
+    setJoinedLoadingMore(true);
+    try {
+      const res = await activityAPI.getMyActivities({
+        hostedOffset,
+        joinedOffset,
+        limit: 10,
+      });
+
+      const fetchedJoined = res.data.joined || [];
+      setJoinedActivities((prev) => {
+        const merged = new Map(prev.map((item) => [item.id, item]));
+        fetchedJoined.forEach((item) => merged.set(item.id, item));
+        return Array.from(merged.values());
+      });
+
+      setJoinedHasMore(Boolean(res.data.joinedHasMore));
+      setJoinedOffset(res.data.joinedNextOffset ?? joinedOffset + fetchedJoined.length);
+    } catch (err) {
+      console.error("Failed to load more joined activities", err);
+    } finally {
+      setJoinedLoadingMore(false);
+    }
+  };
 
   return (
     <div className="page-content">
@@ -110,6 +355,32 @@ const HomePage = () => {
         <p className="page-subtitle" style={{ fontSize: "var(--text-base)" }}>
           Discover people nearby and do things together
         </p>
+
+        {notificationPermission !== "granted" && notificationPermission !== "unsupported" && (
+          <div
+            className="card"
+            style={{
+              marginTop: "var(--space-4)",
+              padding: "var(--space-3)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "var(--space-3)",
+              border: "1px solid rgba(229, 62, 62, 0.25)",
+              background: "rgba(229, 62, 62, 0.08)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+              <Bell size={16} color="#e53e3e" />
+              <span style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
+                Enable notifications to receive SOS alerts
+              </span>
+            </div>
+            <button className="btn btn--danger btn--sm" onClick={requestNotificationPermission}>
+              Allow
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Tab Bar */}
@@ -172,11 +443,26 @@ const HomePage = () => {
               <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }}></span>
             </div>
           ) : nearbyActivities.length > 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)", opacity: nearbyLoading ? 0.6 : 1, transition: "opacity 0.2s" }}>
-              {nearbyActivities.map((activity) => (
-                <ActivityCard key={activity.id} activity={activity} />
-              ))}
-            </div>
+            <>
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)", opacity: nearbyLoading ? 0.6 : 1, transition: "opacity 0.2s" }}>
+                {nearbyActivities.map((activity) => (
+                  <ActivityCard key={activity.id} activity={activity} />
+                ))}
+              </div>
+
+              {nearbyHasMore && (
+                <div style={{ display: "flex", justifyContent: "center", marginTop: "var(--space-5)" }}>
+                  <div ref={nearbyLoadMoreRef} style={{ width: 1, height: 1, opacity: 0, pointerEvents: "none" }} />
+                  <button
+                    className="btn btn--secondary"
+                    onClick={loadMoreNearbyActivities}
+                    disabled={nearbyLoadingMore}
+                  >
+                    {nearbyLoadingMore ? "Loading more..." : "Load More Activities"}
+                  </button>
+                </div>
+              )}
+            </>
           ) : (
             <div className="empty-state">
               <div className="empty-state-icon"><SyncoLogo size={64} /></div>
@@ -206,6 +492,18 @@ const HomePage = () => {
               {hostedActivities.length > 0 ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)", marginBottom: "var(--space-8)" }}>
                   {hostedActivities.map((a) => <ActivityCard key={a.id} activity={a} />)}
+
+                  {hostedHasMore && (
+                    <div style={{ display: "flex", justifyContent: "center" }}>
+                      <button
+                        className="btn btn--secondary btn--sm"
+                        onClick={loadMoreHosted}
+                        disabled={hostedLoadingMore}
+                      >
+                        {hostedLoadingMore ? "Loading..." : "Load More"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="empty-state" style={{ marginBottom: "var(--space-8)", padding: "var(--space-6)" }}>
@@ -216,6 +514,86 @@ const HomePage = () => {
                 </div>
               )}
 
+              {/* SOS */}
+              <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 700, marginBottom: "var(--space-4)", display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+                <AlertTriangle size={18} color="#e53e3e" /> SOS Activity
+              </h2>
+              {mySosSignals.length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)", marginBottom: "var(--space-8)" }}>
+                  {mySosSignals.map((s) => {
+                    const isBusy = sosActionId === s.id;
+                    return (
+                      <div
+                        key={s.id}
+                        className="card"
+                        style={{
+                          margin: 0,
+                          border: s.isActive ? "1px solid rgba(229, 62, 62, 0.35)" : "1px solid var(--color-border)",
+                          background: s.isActive ? "rgba(229, 62, 62, 0.06)" : "var(--color-surface)",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "var(--space-3)" }}>
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-1)" }}>
+                              <strong style={{ fontSize: "var(--text-base)" }}>SOS Signal</strong>
+                              <span
+                                style={{
+                                  fontSize: "11px",
+                                  padding: "2px 8px",
+                                  borderRadius: "999px",
+                                  fontWeight: 700,
+                                  color: s.isActive ? "#9b1c1c" : "#2f855a",
+                                  background: s.isActive ? "rgba(229, 62, 62, 0.15)" : "rgba(47, 133, 90, 0.15)",
+                                }}
+                              >
+                                {s.isActive ? "ACTIVE" : "COMPLETED"}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)" }}>
+                              {new Date(s.createdAt).toLocaleString()}
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                            <button className="btn btn--secondary btn--sm" onClick={() => navigate("/map")}>View on Map</button>
+                            <button
+                              className="btn btn--secondary btn--sm"
+                              onClick={() => window.open(`https://www.google.com/maps?q=${s.latitude},${s.longitude}`, "_blank", "noopener,noreferrer")}
+                            >
+                              Open in Maps
+                            </button>
+                            {s.isActive ? (
+                              <button
+                                className="btn btn--danger btn--sm"
+                                onClick={() => handleCompleteSos(s.id)}
+                                disabled={!!sosActionId}
+                              >
+                                {isBusy ? "Completing..." : "Complete"}
+                              </button>
+                            ) : (
+                              <button
+                                className="btn btn--ghost btn--sm"
+                                onClick={() => handleRemoveSos(s.id)}
+                                disabled={!!sosActionId}
+                              >
+                                {isBusy ? "Removing..." : "Remove"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="empty-state" style={{ marginBottom: "var(--space-8)", padding: "var(--space-6)" }}>
+                  <p className="empty-state-text">No SOS signals yet.</p>
+                  <p className="empty-state-text" style={{ marginTop: "var(--space-2)" }}>
+                    Use the SOS button in the floating menu if you need urgent nearby help.
+                  </p>
+                </div>
+              )}
+
               {/* Joined */}
               <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 700, marginBottom: "var(--space-4)", display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
                 <Users size={18} /> Joined
@@ -223,6 +601,18 @@ const HomePage = () => {
               {joinedActivities.length > 0 ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
                   {joinedActivities.map((a) => <ActivityCard key={a.id} activity={a} />)}
+
+                  {joinedHasMore && (
+                    <div style={{ display: "flex", justifyContent: "center" }}>
+                      <button
+                        className="btn btn--secondary btn--sm"
+                        onClick={loadMoreJoined}
+                        disabled={joinedLoadingMore}
+                      >
+                        {joinedLoadingMore ? "Loading..." : "Load More"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="empty-state" style={{ padding: "var(--space-6)" }}>

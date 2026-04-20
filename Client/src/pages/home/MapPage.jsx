@@ -5,6 +5,8 @@ import { MarkerClusterer, SuperClusterAlgorithm } from "@googlemaps/markercluste
 import { activityAPI, sosAPI } from "../../services/api";
 import { createCategoryMarkerElement } from "../../utils/categoryMarkers";
 import { loadGoogleMaps } from "../../utils/googleMaps";
+import { getSocket } from "../../services/socket";
+import { useAuth } from "../../context/AuthContext";
 
 // Haversine-ish radius in km from google.maps bounds
 const getRadiusFromBounds = (map) => {
@@ -24,12 +26,14 @@ const getRadiusFromBounds = (map) => {
 };
 
 const MapPage = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [activities, setActivities] = useState([]);
   const [sosSignals, setSosSignals] = useState([]);
   const [center, setCenter] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activityCount, setActivityCount] = useState(0);
+  const [sosActionId, setSosActionId] = useState(null);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -42,12 +46,11 @@ const MapPage = () => {
   const mapRef = useRef(null);
   const clustererRef = useRef(null);
   const markersRef = useRef(new Map()); // id → AdvancedMarkerElement
-  const sosMarkersRef = useRef(new Map()); // id → { marker, circle }
+  const sosMarkersRef = useRef(new Map()); // id → AdvancedMarkerElement
   const infoWindowRef = useRef(null);
   const debounceRef = useRef(null);
   const searchDebounceRef = useRef(null);
   const userMarkerRef = useRef(null);
-  const userCircleRef = useRef(null);
   const searchWrapperRef = useRef(null);
 
   // Get user location
@@ -104,6 +107,23 @@ const MapPage = () => {
       console.error("Failed to load SOS signals:", err);
     }
   }, []);
+
+  const handleRemoveOwnSos = useCallback(async (signalId) => {
+    if (!signalId || sosActionId) return;
+    if (!window.confirm("Remove this SOS signal from map?")) return;
+
+    setSosActionId(signalId);
+    try {
+      await sosAPI.deleteById(signalId);
+      setSosSignals((prev) => prev.filter((s) => s.id !== signalId));
+      infoWindowRef.current?.close();
+    } catch (err) {
+      console.error("Failed to remove SOS signal:", err);
+      alert("Failed to remove SOS signal. Please try again.");
+    } finally {
+      setSosActionId(null);
+    }
+  }, [sosActionId]);
 
   // Search: fetch Google Places suggestions
   const fetchSuggestions = useCallback((query) => {
@@ -195,6 +215,35 @@ const MapPage = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Keep SOS markers updated in real-time via socket events.
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleSosSignal = (signal) => {
+      setSosSignals((prev) => {
+        const rest = prev.filter((s) => s.id !== signal.id);
+        return [signal, ...rest];
+      });
+    };
+
+    const handleSosResolved = ({ signalId, userId }) => {
+      setSosSignals((prev) =>
+        prev.filter((s) => {
+          if (signalId) return s.id !== signalId;
+          return s.user?.id !== userId;
+        }),
+      );
+    };
+
+    socket.on("sos-signal", handleSosSignal);
+    socket.on("sos-resolved", handleSosResolved);
+
+    return () => {
+      socket.off("sos-signal", handleSosSignal);
+      socket.off("sos-resolved", handleSosResolved);
+    };
+  }, []);
+
   // Init Google Map when center is ready
   useEffect(() => {
     if (!center || !mapDivRef.current) return;
@@ -228,17 +277,6 @@ const MapPage = () => {
         position: center,
         content: userDot,
         zIndex: 1000,
-      });
-
-      // User radius circle
-      userCircleRef.current = new maps.Circle({
-        map,
-        center,
-        radius: 300,
-        fillColor: "#2b5a8e",
-        fillOpacity: 0.1,
-        strokeColor: "#2b5a8e",
-        strokeWeight: 1,
       });
 
       // MarkerClusterer with SuperCluster for performance
@@ -335,10 +373,9 @@ const MapPage = () => {
     const newIds = new Set(sosSignals.map((s) => s.id));
 
     // Remove stale SOS markers
-    for (const [id, { marker, circle }] of existing) {
+    for (const [id, marker] of existing) {
       if (!newIds.has(id)) {
         marker.map = null;
-        circle.setMap(null);
         existing.delete(id);
       }
     }
@@ -368,41 +405,53 @@ const MapPage = () => {
         zIndex: 2000,
       });
 
-      // Transparent red circle around SOS
-      const circle = new maps.Circle({
-        map: mapRef.current,
-        center: pos,
-        radius: 200,
-        fillColor: "#e53e3e",
-        fillOpacity: 0.08,
-        strokeColor: "#e53e3e",
-        strokeWeight: 1.5,
-        strokeOpacity: 0.3,
-      });
-
-      // Click shows info
+      // Click behavior: always show SOS info popup; actions differ by owner/non-owner.
       marker.addListener("click", () => {
         const iw = infoWindowRef.current;
         const time = new Date(signal.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const isOwner = signal.user?.id === user?.id;
+
         iw.setContent(`
           <div style="text-align:center;min-width:140px;font-family:Inter,sans-serif;">
             <h4 style="margin:0 0 4px;font-size:14px;color:#e53e3e;font-weight:700;">🚨 SOS Signal</h4>
             <div style="font-size:12px;color:#666;margin-bottom:2px;">${signal.user?.displayName || "Someone"} needs help</div>
-            <div style="font-size:11px;color:#999;">${time}</div>
+            <div style="font-size:11px;color:#999;margin-bottom:10px;">${time}</div>
+            ${isOwner ? `
+              <button onclick="window.__syncoRemoveSos__('${signal.id}')" style="
+                width:100%;padding:8px;
+                background:#e53e3e;
+                color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px;
+              ">${sosActionId === signal.id ? "Removing..." : "Remove SOS"}</button>
+            ` : `
+              <button onclick="window.__syncoVisitSos__('${signal.latitude}','${signal.longitude}')" style="
+                width:100%;padding:8px;
+                background:#2f855a;
+                color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px;
+              ">Visit</button>
+            `}
           </div>
         `);
         iw.open({ map: mapRef.current, anchor: marker });
       });
 
-      existing.set(signal.id, { marker, circle });
+      existing.set(signal.id, marker);
     }
   }, [sosSignals]);
 
   // Navigation helper for InfoWindow buttons
   useEffect(() => {
     window.__syncoNav__ = (id) => navigate(`/activities/${id}`);
-    return () => { delete window.__syncoNav__; };
-  }, [navigate]);
+    window.__syncoRemoveSos__ = (id) => { handleRemoveOwnSos(id); };
+    window.__syncoVisitSos__ = (lat, lng) => {
+      const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+      window.open(mapsUrl, "_blank", "noopener,noreferrer");
+    };
+    return () => {
+      delete window.__syncoNav__;
+      delete window.__syncoRemoveSos__;
+      delete window.__syncoVisitSos__;
+    };
+  }, [navigate, handleRemoveOwnSos]);
 
   if (!center && loading) {
     return (
