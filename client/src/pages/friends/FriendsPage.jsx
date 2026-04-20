@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { friendAPI, userAPI } from "../../services/api";
 import ChatInboxPage from "../chat/ChatInboxPage";
 import { Users } from "lucide-react";
 
 const FriendsPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState("friends"); // 'friends', 'chats'
   const [friends, setFriends] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -16,12 +17,12 @@ const FriendsPage = () => {
   const [searchResults, setSearchResults] = useState([]);
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
+    const urlParams = new URLSearchParams(location.search);
     const tabParams = urlParams.get("tab");
-    if (tabParams) {
+    if (tabParams === "friends" || tabParams === "chats") {
       setActiveTab(tabParams);
     }
-  }, []);
+  }, [location.search]);
 
   const fetchFriends = async () => {
     setLoading(true);

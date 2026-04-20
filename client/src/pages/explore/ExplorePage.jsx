@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { activityAPI } from "../../services/api";
 import ActivityCard from "../../components/activity/ActivityCard";
 import CategoryIcon from "../../components/common/CategoryIcon";
 import SyncoLogo from "../../components/common/SyncoLogo";
 import { CATEGORIES } from "../../utils/categories";
-import { Search, Sparkles, SlidersHorizontal } from "lucide-react";
+import { Search, Sparkles } from "lucide-react";
 import FloatingActionButton from "../../components/layout/FloatingActionButton";
 
-const EXPLORE_PAGE_SIZE = 12;
+const EXPLORE_PAGE_SIZE = 10;
 
 const ExplorePage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -20,15 +20,15 @@ const ExplorePage = () => {
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
+  const [visibilityFilter, setVisibilityFilter] = useState("PUBLIC");
   const locationRef = useRef(null);
   const queryVersionRef = useRef(0);
   const loadMoreRef = useRef(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 500);
+    const timer = setTimeout(() => setDebouncedSearchQuery(searchQuery), 500);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
@@ -42,13 +42,13 @@ const ExplorePage = () => {
 
     try {
       const params = effectiveLocation
-        ? { lat: effectiveLocation.lat, lng: effectiveLocation.lng, radius: 999 }
+        ? { lat: effectiveLocation.lat, lng: effectiveLocation.lng, radius: 50 }
         : {};
 
       if (categoryFilter) params.category = categoryFilter;
-      if (debouncedSearch) params.search = debouncedSearch;
+      if (debouncedSearchQuery) params.search = debouncedSearchQuery;
       if (dateFilter) params.date = dateFilter;
-      params.visibility = "PUBLIC";
+      if (visibilityFilter) params.visibility = visibilityFilter;
       params.offset = nextOffset;
       params.limit = EXPLORE_PAGE_SIZE;
 
@@ -106,7 +106,7 @@ const ExplorePage = () => {
     return () => {
       cancelled = true;
     };
-  }, [categoryFilter, debouncedSearch, dateFilter]);
+  }, [categoryFilter, debouncedSearchQuery, dateFilter, visibilityFilter]);
 
   const loadMoreExploreActivities = () => {
     if (loading || loadingMore || !hasMore) return;
@@ -150,50 +150,55 @@ const ExplorePage = () => {
         </p>
       </div>
 
-      {/* Search + Filter Toggle */}
+      {/* Filters */}
       <div className="animate-fade-in-up" style={{ animationDelay: "100ms", marginBottom: "var(--space-6)" }}>
-        <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", background: "var(--color-surface)", padding: "var(--space-3)", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)" }}>
           <div style={{ flex: 1, position: "relative" }}>
             <Search size={18} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-muted)" }} />
             <input
               type="text"
               className="input"
-              placeholder="Search activities, locations..."
+              placeholder="Search activities..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ paddingLeft: "36px", width: "100%", margin: 0, height: "44px" }}
+              style={{ paddingLeft: "36px", width: "100%", margin: 0, height: "40px" }}
             />
           </div>
-          <button
-            className={`btn ${showFilters ? "btn--primary" : "btn--secondary"} btn--sm`}
-            onClick={() => setShowFilters((p) => !p)}
-            style={{ height: "44px", padding: "0 var(--space-3)", flexShrink: 0 }}
-            title="Toggle filters"
-          >
-            <SlidersHorizontal size={18} />
-          </button>
-        </div>
-
-        {showFilters && (
-          <div style={{ marginTop: "var(--space-3)", display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 150px" }}>
             <input
               type="date"
               className="input"
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
-              style={{ flex: "1 1 180px", margin: 0, height: "40px", paddingLeft: "12px" }}
+              style={{ width: "100%", margin: 0, height: "40px", paddingLeft: "12px" }}
             />
-            {(categoryFilter || dateFilter) && (
-              <button
-                className="btn btn--ghost btn--sm"
-                onClick={() => { setSearchParams({}); setDateFilter(""); }}
-                style={{ height: "40px" }}
-              >
-                Clear Filters
-              </button>
-            )}
           </div>
-        )}
+          <div style={{ flex: "1 1 120px" }}>
+            <select
+              className="input"
+              value={visibilityFilter}
+              onChange={(e) => setVisibilityFilter(e.target.value)}
+              style={{ width: "100%", margin: 0, height: "42px", padding: "var(--space-2) var(--space-3)" }}
+            >
+              <option value="PUBLIC">Public</option>
+              <option value="FRIENDS">Friends Only</option>
+            </select>
+          </div>
+          {(categoryFilter || dateFilter || visibilityFilter !== "PUBLIC" || debouncedSearchQuery) && (
+            <button
+              className="btn btn--ghost btn--sm"
+              onClick={() => {
+                setSearchParams({});
+                setSearchQuery("");
+                setDateFilter("");
+                setVisibilityFilter("PUBLIC");
+              }}
+              style={{ height: "40px" }}
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Categories Grid */}
