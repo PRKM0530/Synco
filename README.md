@@ -235,3 +235,4 @@ The project is configured for free tier deployment:
 ## License
 
 This project is for educational purposes.
+ 
