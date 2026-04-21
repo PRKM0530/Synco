@@ -12,5 +12,7 @@ router.delete("/messages/:messageId", auth, chatController.deleteMessage);
 router.get("/dms", auth, chatController.getInbox);
 router.get("/dms/:friendId", auth, chatController.getDirectMessages);
 router.put("/dms/:friendId/read", auth, chatController.markDMRead);
+router.put("/dms/message/:messageId/pin", auth, chatController.pinDirectMessage);
+router.delete("/dms/message/:messageId", auth, chatController.deleteDirectMessage);
 
 module.exports = router;

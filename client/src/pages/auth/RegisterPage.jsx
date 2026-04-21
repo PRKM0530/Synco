@@ -45,12 +45,14 @@ const RegisterPage = () => {
 
     setLoading(true);
     try {
-      await register({
+      const res = await register({
         displayName: form.displayName,
         email: form.email,
         password: form.password,
       });
-      navigate("/");
+      if (res?.pendingVerification) {
+        navigate("/verify-email", { state: { email: form.email } });
+      }
     } catch {
       // Error handled by AuthContext
     } finally {

@@ -57,7 +57,7 @@ model Activity {
   status          ActivityStatus         @default(UPCOMING)
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
-  host            User                   @relation("HostedActivities", fields: [hostId], references: [id])
+  host            User                   @relation("HostedActivities", fields: [hostId], references: [id], onDelete: Cascade)
   members         ActivityMember[]
   verifications   ActivityVerification[]
   chatRoom        ChatRoom?
@@ -73,7 +73,7 @@ model ActivityMember {
   joinedAt   DateTime @default(now())
   lastReadAt DateTime @default(now())
   activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  user       User     @relation(fields: [userId], references: [id])
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([activityId, userId])
 }
@@ -85,7 +85,7 @@ model JoinRequest {
   status     RequestStatus @default(PENDING)
   createdAt  DateTime      @default(now())
   activity   Activity      @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  user       User          @relation(fields: [userId], references: [id])
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([activityId, userId])
 }
@@ -111,6 +111,15 @@ model VerificationToken {
   @@unique([email, token])
 }
 
+model PendingUser {
+  email        String   @id
+  displayName  String
+  passwordHash String
+  token        String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+}
+
 model ChatRoom {
   id         String           @id @default(uuid())
   activityId String           @unique
@@ -126,7 +135,7 @@ model ChatRoomMember {
   userId     String
   joinedAt   DateTime @default(now())
   chatRoom   ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
-  user       User     @relation(fields: [userId], references: [id])
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([chatRoomId, userId])
 }
@@ -140,7 +149,7 @@ model ChatMessage {
   isPinned  Boolean     @default(false)
   createdAt DateTime    @default(now())
   room      ChatRoom    @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  sender    User        @relation(fields: [senderId], references: [id])
+  sender    User        @relation(fields: [senderId], references: [id], onDelete: Cascade)
 }
 
 model Notification {
@@ -154,7 +163,7 @@ model Notification {
   isRead          Boolean          @default(false)
   createdAt       DateTime         @default(now())
   relatedActivity Activity?        @relation(fields: [activityId], references: [id])
-  recipient       User             @relation(fields: [recipientId], references: [id])
+  recipient       User             @relation(fields: [recipientId], references: [id], onDelete: Cascade)
 }
 
 model Report {
@@ -166,8 +175,8 @@ model Report {
   status         ReportStatus @default(PENDING)
   adminNotes     String?
   createdAt      DateTime     @default(now())
-  reportedUser   User         @relation("ReportedUser", fields: [reportedUserId], references: [id])
-  reporter       User         @relation("Reporter", fields: [reporterId], references: [id])
+  reportedUser   User         @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  reporter       User         @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
 }
 
 model TrustLog {
@@ -177,7 +186,7 @@ model TrustLog {
   pointsChange Int
   activityId   String?
   createdAt    DateTime  @default(now())
-  user         User      @relation(fields: [userId], references: [id])
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model DirectMessage {
@@ -188,8 +197,9 @@ model DirectMessage {
   type       MessageType @default(TEXT)
   createdAt  DateTime    @default(now())
   isRead     Boolean     @default(false)
-  receiver   User        @relation("ReceivedDirectMessages", fields: [receiverId], references: [id])
-  sender     User        @relation("SentDirectMessages", fields: [senderId], references: [id])
+  isPinned   Boolean     @default(false)
+  receiver   User        @relation("ReceivedDirectMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender     User        @relation("SentDirectMessages", fields: [senderId], references: [id], onDelete: Cascade)
 }
 
 model ActivityVerification {
@@ -202,7 +212,7 @@ model ActivityVerification {
   finalStatus        String?
   createdAt          DateTime           @default(now())
   activity           Activity           @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  participant        User               @relation(fields: [participantId], references: [id])
+  participant        User               @relation(fields: [participantId], references: [id], onDelete: Cascade)
 
   @@unique([activityId, participantId])
 }
@@ -268,7 +278,7 @@ model SosSignal {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum FeedbackType {

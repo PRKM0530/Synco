@@ -1537,21 +1537,21 @@ textarea.input {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 36px;
+  width: 48px;
   cursor: pointer;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.45));
   transition: transform 0.2s ease, filter 0.2s ease;
 }
 
 .category-marker:hover {
-  transform: scale(1.18) translateY(-3px);
-  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
+  transform: scale(1.15) translateY(-4px);
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55));
 }
 
 .category-marker-bubble {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1562,8 +1562,8 @@ textarea.input {
   position: absolute;
   top: 0;
   left: 0;
-  width: 36px;
-  height: 36px;
+  width: 48px;
+  height: 48px;
 }
 
 /* The icon SVG sits centered on top */
@@ -1572,8 +1572,8 @@ textarea.input {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   z-index: 1;
   pointer-events: none;
 }

@@ -165,6 +165,18 @@ const initializeSocket = (server) => {
       }
     });
 
+    /** pin-dm-message */
+    socket.on("pin-dm-message", ({ receiveId, messageId, isPinned }) => {
+      const roomName = `dm_${[socket.user.id, receiveId].sort().join("_")}`;
+      io.to(roomName).emit("dm-message-pinned", { messageId, isPinned });
+    });
+
+    /** delete-dm-message */
+    socket.on("delete-dm-message", ({ receiveId, deletedMessage }) => {
+      const roomName = `dm_${[socket.user.id, receiveId].sort().join("_")}`;
+      io.to(roomName).emit("dm-message-deleted", deletedMessage);
+    });
+
     socket.on("disconnect", () => {
       console.log(`≡ƒöî Socket disconnected: ${socket.id}`);
     });

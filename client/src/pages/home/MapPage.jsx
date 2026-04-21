@@ -305,6 +305,7 @@ const MapPage = () => {
         mapTypeControl: false,
         fullscreenControl: false,
         gestureHandling: "greedy",
+        styles: [{ featureType: "poi", stylers: [{ visibility: "off" }] }],
       });
       mapRef.current = map;
 

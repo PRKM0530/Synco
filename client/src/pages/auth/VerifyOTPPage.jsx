@@ -8,7 +8,7 @@ import { AlertTriangle, Mail } from "lucide-react";
 const VerifyOTPPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { updateUser, user } = useAuth();
+  const { user, verifyEmail: contextVerifyEmail } = useAuth();
   
   // We expect email to be passed in state from register/login plugin or via context
   const email = location.state?.email || user?.email || "";
@@ -28,13 +28,11 @@ const VerifyOTPPage = () => {
     setLoading(true);
     setError("");
     try {
-      await authAPI.verifyEmail({ email, otp });
-      // Update local context
-      updateUser({ isVerified: true });
+      await contextVerifyEmail({ email, otp });
       navigate("/");
     } catch (err) {
       setError(
-        err.response?.data?.error || "Failed to verify. Please check your OTP."
+        err.message || "Failed to verify. Please check your OTP."
       );
     } finally {
       setLoading(false);
