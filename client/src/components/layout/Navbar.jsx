@@ -14,11 +14,14 @@ const Navbar = () => {
   const prevUnreadRef = useRef(0);
   const latestNotifIdRef = useRef(null);
 
-  // Poll for unread notification count every 30 seconds & show toasts on new ones
+  // Poll for unread notification count every 60s & show toasts on new ones.
+  // PERFORMANCE: Increased from 30s → 60s, and skips when tab is hidden.
   useEffect(() => {
     if (!user) return;
 
     const fetchUnread = async () => {
+      // Skip polling if the tab is not visible
+      if (document.hidden) return;
       try {
         const res = await notificationAPI.getNotifications();
         const all = res.data.notifications || [];
@@ -53,7 +56,7 @@ const Navbar = () => {
     };
 
     fetchUnread();
-    const interval = setInterval(fetchUnread, 30000);
+    const interval = setInterval(fetchUnread, 60000);
     return () => clearInterval(interval);
   }, [user]);
 

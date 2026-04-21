@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
+const compression = require("compression");
 const path = require("path");
 const config = require("./config");
 const errorHandler = require("./middleware/errorHandler");
@@ -22,6 +23,9 @@ const sosRoutes = require("./routes/sos.routes");
 const app = express();
 
 // --- Middleware ---
+// PERFORMANCE: Compress all responses (gzip). ~60-80% smaller payloads.
+app.use(compression());
+
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 
 // Allow multiple origins (comma-separated CLIENT_URL for dev + production)

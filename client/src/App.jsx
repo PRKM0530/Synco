@@ -11,29 +11,41 @@ import BottomNav from "./components/layout/BottomNav";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { userAPI } from "./services/api";
 
-// Lazy-loaded map pages (heavy Google Maps SDK)
+// PERFORMANCE: Lazy-load ALL pages for code-splitting.
+// Only the code for the current route is downloaded on navigation.
+// Previously 15+ pages were eagerly bundled into one massive JS file.
+
+// Auth pages
+const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
+const RegisterPage = lazy(() => import("./pages/auth/RegisterPage"));
+const VerifyOTPPage = lazy(() => import("./pages/auth/VerifyOTPPage"));
+const ForgotPasswordPage = lazy(() => import("./pages/auth/ForgotPasswordPage"));
+const ResetPasswordPage = lazy(() => import("./pages/auth/ResetPasswordPage"));
+
+// Main pages
+const HomePage = lazy(() => import("./pages/home/HomePage"));
 const MapPage = lazy(() => import("./pages/home/MapPage"));
+const ExplorePage = lazy(() => import("./pages/explore/ExplorePage"));
+
+// Profile pages
+const ProfilePage = lazy(() => import("./pages/profile/ProfilePage"));
+const EditProfilePage = lazy(() => import("./pages/profile/EditProfilePage"));
+
+// Activity pages
 const CreateActivityPage = lazy(() => import("./pages/activity/CreateActivityPage"));
 const EditActivityPage = lazy(() => import("./pages/activity/EditActivityPage"));
+const ActivityDetailPage = lazy(() => import("./pages/activity/ActivityDetailPage"));
+const VerifyAttendancePage = lazy(() => import("./pages/activity/VerifyAttendancePage"));
+const HostRosterPage = lazy(() => import("./pages/activity/HostRosterPage"));
 
-// Pages
-import LoginPage from "./pages/auth/LoginPage";
-import RegisterPage from "./pages/auth/RegisterPage";
-import HomePage from "./pages/home/HomePage";
-import ProfilePage from "./pages/profile/ProfilePage";
-import EditProfilePage from "./pages/profile/EditProfilePage";
-import ActivityDetailPage from "./pages/activity/ActivityDetailPage";
-import FriendsPage from "./pages/friends/FriendsPage";
-import NotificationsPage from "./pages/notifications/NotificationsPage";
-import ChatInboxPage from "./pages/chat/ChatInboxPage";
-import DirectMessagePage from "./pages/chat/DirectMessagePage";
-import VerifyAttendancePage from "./pages/activity/VerifyAttendancePage";
-import HostRosterPage from "./pages/activity/HostRosterPage";
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import ExplorePage from "./pages/explore/ExplorePage";
-import VerifyOTPPage from "./pages/auth/VerifyOTPPage";
-import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
-import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
+// Social pages
+const FriendsPage = lazy(() => import("./pages/friends/FriendsPage"));
+const NotificationsPage = lazy(() => import("./pages/notifications/NotificationsPage"));
+const ChatInboxPage = lazy(() => import("./pages/chat/ChatInboxPage"));
+const DirectMessagePage = lazy(() => import("./pages/chat/DirectMessagePage"));
+
+// Admin
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 
 // Protected Route wrapper
 const ProtectedRoute = ({ children }) => {
