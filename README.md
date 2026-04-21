@@ -1,19 +1,19 @@
-# Synco — Real-Time Activity Platform
+# Synco - Discover People. Do Things Together.
 
-Synco is a full-stack web application that lets users discover, create, and join real-world activities happening nearby. Think of it as a social meetup platform with real-time chat, trust scoring, map-based discovery, and safety features built in.
+Synco is a full stack web application that lets users discover, create, and join real-world activities happening nearby. Think of it as a social meetup platform with real-time chat, trust scoring, map based discovery, and safety features built in.
 
 ## Features
 
-- **Activity Management** — Create, edit, join, and manage group activities with category tags, location pins, and participant limits
-- **Map View** — Discover nearby activities on an interactive Google Maps interface with distance filtering
-- **Real-Time Chat** — Group chat rooms for each activity + direct messages between friends, powered by Socket.IO
-- **Trust Score System** — Users earn or lose trust points based on attendance verification, encouraging accountability
-- **Attendance Verification** — QR-code based check-in system with host roster confirmation
-- **Friend System** — Add friends, view their activities, and filter the feed by friends-only content
-- **SOS Safety Feature** — Emergency signal broadcasting to nearby users with live map tracking
-- **Notifications** — Real-time push notifications for join requests, approvals, friend requests, and SOS alerts
-- **Admin Dashboard** — Moderation panel for managing reports, banning users, and platform oversight
-- **Email Verification** — OTP-based email verification for account registration and password reset
+- **Activity Management** - Create, edit, join, and manage group activities with category tags, location pins, and participant limits
+- **Map View** - Discover nearby activities on an interactive Google Maps interface with distance filtering
+- **Real-Time Chat** - Group chat rooms for each activity + direct messages between friends, powered by Socket.IO
+- **Trust Score System** - Users earn or lose trust points based on attendance verification, encouraging accountability
+- **Attendance Verification** - check-in system with host roster confirmation
+- **Friend System** - Add friends, view their activities, and filter the feed by friends-only content
+- **SOS Safety Feature** - Emergency signal broadcasting to nearby users with live map tracking
+- **Notifications** - Real-time push notifications for join requests, approvals, friend requests, and SOS alerts
+- **Admin Dashboard** - Moderation panel for managing reports, banning users, and platform oversight
+- **Email Verification** - OTP based email verification for account registration and password reset
 
 ## Tech Stack
 
@@ -174,24 +174,24 @@ See `server/routes/` for the complete API reference.
 
 The PostgreSQL database is managed through Prisma. Key models:
 
-- **User** — Profile, trust score, role (USER/ADMIN), verification status
-- **Activity** — Title, location (lat/lng), category, visibility, status
-- **ActivityMember** — Many-to-many join table with co-host support
-- **JoinRequest** — Pending/Approved/Rejected join requests
-- **ChatRoom & ChatMessage** — Activity group chat with pin/delete support
-- **DirectMessage** — One-to-one messaging between users
-- **FriendContact** — Unidirectional friend relationships
-- **Notification** — In-app notifications with types (join, approval, SOS, etc.)
-- **ActivityVerification** — Attendance confirmation with host feedback
-- **TrustLog** — Audit trail for trust score changes
-- **Report** — User reports with admin moderation
-- **SosSignal** — Emergency signals with GPS coordinates
+- **User** - Profile, trust score, role (USER/ADMIN), verification status
+- **Activity** - Title, location (lat/lng), category, visibility, status
+- **ActivityMember** - Many-to-many join table with co-host support
+- **JoinRequest** - Pending/Approved/Rejected join requests
+- **ChatRoom & ChatMessage** - Activity group chat with pin/delete support
+- **DirectMessage** - One-to-one messaging between users
+- **FriendContact** - Unidirectional friend relationships
+- **Notification** - In-app notifications with types (join, approval, SOS, etc.)
+- **ActivityVerification** - Attendance confirmation with host feedback
+- **TrustLog** - Audit trail for trust score changes
+- **Report** - User reports with admin moderation
+- **SosSignal** - Emergency signals with GPS coordinates
 
 Run `npx prisma studio` to browse the database visually.
 
 ## Deployment
 
-The project is configured for free-tier deployment:
+The project is configured for free tier deployment:
 
 | Component | Service |
 |-----------|---------|
@@ -199,16 +199,13 @@ The project is configured for free-tier deployment:
 | Backend | Render |
 | Database | Neon (free PostgreSQL) |
 
-### Quick Deploy Steps
+### Deployment Notes
 
-1. **Database** — Create a free PostgreSQL database on [neon.tech](https://neon.tech)
-2. **Backend** — Deploy `server/` to [Render](https://render.com) as a Web Service
-   - Build Command: `npm install && npx prisma generate && npx prisma db push`
-   - Start Command: `node server.js`
-3. **Frontend** — Deploy `client/` to [Netlify](https://netlify.com)
-   - Build Command: `npm run build`
-   - Publish Directory: `client/dist`
-   - Set `VITE_API_URL` and `VITE_SOCKET_URL` to your Render URL
+- **Render Keep-Alive**: The server includes a self-ping mechanism that hits `/api/health` every 14 minutes to prevent Render's free tier from spinning down. This activates automatically when `RENDER_EXTERNAL_URL` is detected (set by Render).
+- **Response Compression**: All API responses are gzip-compressed via the `compression` middleware (~60-80% smaller payloads).
+- **Code Splitting**: The frontend uses `React.lazy()` for all pages, producing per-route JS chunks. Only the code for the current page is downloaded.
+- **Build Optimization**: Vite splits vendor libraries (React, Router) and map libraries (Google Maps, Leaflet) into separate cached chunks.
+- **Connection Pooling**: Prisma is configured with `connection_limit=5` for Neon's free tier to prevent connection exhaustion.
 
 ## Environment Variables
 
@@ -225,6 +222,7 @@ The project is configured for free-tier deployment:
 | `SMTP_PORT` | Email server port |
 | `SMTP_USER` | Email address |
 | `SMTP_PASS` | Email app password |
+| `RENDER_EXTERNAL_URL` | Auto-set by Render; enables keep-alive ping |
 
 ### Client (`client/.env`)
 
@@ -233,17 +231,6 @@ The project is configured for free-tier deployment:
 | `VITE_API_URL` | Backend API URL (leave empty for local dev) |
 | `VITE_SOCKET_URL` | Socket.IO server URL (leave empty for local dev) |
 | `VITE_GOOGLE_MAPS_API_KEY` | Google Maps API key |
-
-## Team
-
-| Member | Role |
-|--------|------|
-| **Praveen (PRKM0530)** | Project Lead — Architecture, Auth, Core Backend |
-| **Preshit (ArcNetic)** | Activity Pages — Create, Edit, Detail, Map Picker |
-| **Umesh** | Chat System — Inbox, DMs, Real-Time Messaging, SOS |
-| **Chirag** | Notifications — Backend Controller & UI |
-| **Omprakash Saran** | Profile System — Profile Page, Edit Profile, Friends |
-| **Aditya (ADITYA106K)** | Admin Panel — Dashboard, Reports, Moderation |
 
 ## License
 
