@@ -1,15 +1,28 @@
 /**
  * Shared email utility for sending OTP and transactional emails.
  * Uses SMTP credentials from environment or falls back to Ethereal test accounts.
+ *
+ * PERFORMANCE: The transporter is created once and cached as a module-level
+ * singleton. Previously it was re-created on every send, adding 5–15 s of
+ * SMTP handshake latency per email on free-tier hosts.
  */
 
 const nodemailer = require("nodemailer");
 
+/* ── Cached transporter singleton ──────────────────────────────────────── */
+let cachedTransporter = null;
+let cachedFromAddress = null;
+
 /**
- * Build and return an authenticated Nodemailer transporter.
- * If real SMTP credentials exist in env, uses those; otherwise creates an Ethereal test account.
+ * Build (or return the cached) authenticated Nodemailer transporter.
+ * If real SMTP credentials exist in env, uses those; otherwise creates an
+ * Ethereal test account.
  */
-const createTransporter = async () => {
+const getTransporter = async () => {
+  if (cachedTransporter) {
+    return { transporter: cachedTransporter, fromAddress: cachedFromAddress };
+  }
+
   const smtpUser = process.env.SMTP_USER?.trim();
   const smtpPass = process.env.SMTP_PASS?.trim();
   const smtpHost = process.env.SMTP_HOST?.trim() || "smtp.gmail.com";
@@ -24,8 +37,15 @@ const createTransporter = async () => {
       requireTLS: smtpPort === 587,
       auth: { user: smtpUser, pass: smtpPass },
       tls: { rejectUnauthorized: false },
+      // Keep the connection alive for reuse
+      pool: true,
+      maxConnections: 3,
+      maxMessages: Infinity,
     });
     await transporter.verify();
+    cachedTransporter = transporter;
+    cachedFromAddress = smtpUser;
+    console.log("[Synco Mail] SMTP transporter cached and verified ✓");
     return { transporter, fromAddress: smtpUser };
   }
 
@@ -45,6 +65,8 @@ const createTransporter = async () => {
     auth: { user: account.user, pass: account.pass },
   });
 
+  cachedTransporter = transporter;
+  cachedFromAddress = null;
   return { transporter, fromAddress: null };
 };
 
@@ -59,7 +81,7 @@ const createTransporter = async () => {
  */
 const sendOtpEmail = async (email, otp, { isPasswordReset = false, isEmailChange = false } = {}) => {
   try {
-    const { transporter, fromAddress } = await createTransporter();
+    const { transporter, fromAddress } = await getTransporter();
 
     let subject, title, desc;
     if (isEmailChange) {
@@ -98,6 +120,9 @@ const sendOtpEmail = async (email, otp, { isPasswordReset = false, isEmailChange
     }
   } catch (err) {
     console.error("[Synco Mail] Failed to send email:", err.message);
+    // Invalidate cached transporter on error so it's rebuilt on next attempt
+    cachedTransporter = null;
+    cachedFromAddress = null;
   }
 };
 

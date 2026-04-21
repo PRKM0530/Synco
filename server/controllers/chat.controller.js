@@ -211,12 +211,13 @@ exports.markChatRead = async (req, res, next) => {
 exports.getInbox = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    // 1. Direct Messages
+    // 1. Direct Messages — only fetch newest 500 to keep it fast
     const rawMessages = await prisma.directMessage.findMany({
       where: {
         OR: [{ senderId: userId }, { receiverId: userId }],
       },
       orderBy: { createdAt: "desc" },
+      take: 500,
       include: {
         sender: { select: { id: true, displayName: true, profilePhoto: true } },
         receiver: {

@@ -33,7 +33,7 @@ const register = async (req, res, next) => {
         .json({ error: "An account with this email already exists." });
     }
 
-    const salt = await bcrypt.genSalt(12);
+    const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -127,6 +127,8 @@ const login = async (req, res, next) => {
  */
 const getMe = async (req, res, next) => {
   try {
+    // PERFORMANCE: Keep this query lightweight — it runs on every page load.
+    // Only return fields needed for auth state & navbar display.
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
       select: {
@@ -142,23 +144,6 @@ const getMe = async (req, res, next) => {
         role: true,
         isVerified: true,
         createdAt: true,
-        _count: {
-          select: {
-            hostedActivities: true,
-            activityMembers: true,
-          },
-        },
-        hostedActivities: {
-          take: 5,
-          orderBy: { createdAt: "desc" },
-        },
-        activityMembers: {
-          take: 5,
-          orderBy: { joinedAt: "desc" },
-          include: {
-            activity: true,
-          },
-        },
       },
     });
 
@@ -307,7 +292,7 @@ const resetPassword = async (req, res, next) => {
       return res.status(400).json({ error: "OTP expired" });
     }
     
-    const salt = await bcrypt.genSalt(12);
+    const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(newPassword, salt);
     
     await prisma.user.update({
