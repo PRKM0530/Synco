@@ -86,15 +86,15 @@ const buildMarkerHTML = (category) => {
   return `
     <div class="category-marker" style="--marker-color: ${color}">
       <div class="category-marker-bubble">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="36" height="36">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="46" height="46">
           ${shapeSvg}
         </svg>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" class="category-marker-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" class="category-marker-icon">
           ${icon}
         </svg>
       </div>
       <div class="category-marker-pointer">
-        <svg width="12" height="7" viewBox="0 0 14 8">
+        <svg width="16" height="10" viewBox="0 0 14 8">
           <polygon points="0,0 7,8 14,0" fill="${color}"/>
         </svg>
       </div>

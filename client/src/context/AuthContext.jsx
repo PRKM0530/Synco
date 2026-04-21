@@ -53,11 +53,8 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     try {
       const res = await authAPI.register({ email, password, displayName });
-      const { token, user: userData } = res.data;
-      localStorage.setItem("synco_token", token);
-      localStorage.setItem("synco_user", JSON.stringify(userData));
-      setUser(userData);
-      return userData;
+      // API now returns { pendingVerification: true, email }
+      return res.data;
     } catch (err) {
       const message =
         err.response?.data?.error ||
@@ -79,6 +76,22 @@ export const AuthProvider = ({ children }) => {
       return userData;
     } catch (err) {
       const message = err.response?.data?.error || "Login failed.";
+      setError(message);
+      throw new Error(message);
+    }
+  }, []);
+
+  const verifyEmail = useCallback(async ({ email, otp }) => {
+    setError(null);
+    try {
+      const res = await authAPI.verifyEmail({ email, otp });
+      const { token, user: userData } = res.data;
+      localStorage.setItem("synco_token", token);
+      localStorage.setItem("synco_user", JSON.stringify(userData));
+      setUser(userData);
+      return userData;
+    } catch (err) {
+      const message = err.response?.data?.error || "Failed to verify. Please check your OTP.";
       setError(message);
       throw new Error(message);
     }
@@ -106,6 +119,7 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: !!user,
     register,
     login,
+    verifyEmail,
     logout,
     updateUser,
     clearError: () => setError(null),

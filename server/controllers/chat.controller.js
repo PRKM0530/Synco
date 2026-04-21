@@ -325,3 +325,74 @@ exports.markDMRead = async (req, res, next) => {
     next(err);
   }
 };
+
+// Toggle Pin Status for DM
+exports.pinDirectMessage = async (req, res, next) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.id;
+
+    const message = await prisma.directMessage.findUnique({
+      where: { id: messageId },
+    });
+
+    if (!message) return res.status(404).json({ error: "Message not found" });
+
+    if (message.senderId !== userId && message.receiverId !== userId) {
+      return res.status(403).json({ error: "Not authorized to pin this message." });
+    }
+
+    if (message.type === "SYSTEM") {
+      return res.status(400).json({ error: "System/deleted messages cannot be pinned." });
+    }
+
+    const updated = await prisma.directMessage.update({
+      where: { id: messageId },
+      data: { isPinned: !message.isPinned },
+    });
+
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Delete Direct Message
+exports.deleteDirectMessage = async (req, res, next) => {
+  try {
+    const { messageId } = req.params;
+    const userId = req.user.id;
+
+    const message = await prisma.directMessage.findUnique({
+      where: { id: messageId },
+    });
+
+    if (!message) return res.status(404).json({ error: "Message not found" });
+
+    if (message.senderId !== userId) {
+      return res.status(403).json({ error: "You can only delete your own messages." });
+    }
+
+    if (message.type === "SYSTEM") {
+      return res.status(400).json({ error: "This message is already deleted." });
+    }
+
+    const updated = await prisma.directMessage.update({
+      where: { id: messageId },
+      data: {
+        content: "This message was deleted.",
+        type: "SYSTEM",
+        isPinned: false,
+      },
+      include: {
+        sender: {
+          select: { id: true, displayName: true, profilePhoto: true },
+        },
+      },
+    });
+
+    res.json({ message: "Message deleted successfully.", deletedMessage: updated });
+  } catch (err) {
+    next(err);
+  }
+};

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { userAPI, chatAPI } from "../../services/api";
 import { getSocket } from "../../services/socket";
 import { useAuth } from "../../context/AuthContext";
+import { Pin, MoreVertical, Trash2 } from "lucide-react";
 
 const DirectMessagePage = () => {
   const { friendId } = useParams();
@@ -15,6 +16,7 @@ const DirectMessagePage = () => {
   const [loading, setLoading] = useState(true);
   const [firstUnreadMsgId, setFirstUnreadMsgId] = useState(null);
   const [initialUnreadCount, setInitialUnreadCount] = useState(0);
+  const [openMenuId, setOpenMenuId] = useState(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -72,9 +74,24 @@ const DirectMessagePage = () => {
       chatAPI.markDMRead(friendId).catch(console.error);
     });
 
+    socket.on("dm-message-deleted", (deletedMessage) => {
+      if (!deletedMessage?.id) return;
+      setMessages((prev) =>
+        prev.map((m) => (m.id === deletedMessage.id ? { ...m, ...deletedMessage } : m)),
+      );
+    });
+
+    socket.on("dm-message-pinned", ({ messageId, isPinned }) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, isPinned } : m)),
+      );
+    });
+
     return () => {
       socket.emit("leave-dm-room", friendId);
       socket.off("receive-dm-message");
+      socket.off("dm-message-deleted");
+      socket.off("dm-message-pinned");
     };
   }, [friendId]);
 
@@ -93,6 +110,34 @@ const DirectMessagePage = () => {
     });
 
     setNewMessage("");
+  };
+
+  const togglePin = async (msgId) => {
+    try {
+      const res = await chatAPI.pinDMMessage(msgId);
+      const isPinned = res.data.isPinned;
+      const socket = getSocket();
+      socket.emit("pin-dm-message", {
+        receiveId: friendId,
+        messageId: msgId,
+        isPinned,
+      });
+    } catch (err) {
+      alert(err.response?.data?.error || "Failed to pin message.");
+    }
+  };
+
+  const deleteMessage = async (msgId) => {
+    if (!window.confirm("Delete this message?")) return;
+    try {
+      const res = await chatAPI.deleteDMMessage(msgId);
+      const deletedMessage = res.data?.deletedMessage;
+      const socket = getSocket();
+      socket.emit("delete-dm-message", { receiveId: friendId, deletedMessage });
+      setOpenMenuId(null);
+    } catch (err) {
+      alert(err.response?.data?.error || "Failed to delete message.");
+    }
   };
 
   if (loading) {
@@ -159,6 +204,52 @@ const DirectMessagePage = () => {
           {friend.displayName}
         </div>
       </div>
+
+      {/* Pinned Messages Banner */}
+      {(() => {
+        const pinnedMessages = messages.filter((m) => m.isPinned);
+        if (pinnedMessages.length === 0) return null;
+        return (
+          <div
+            style={{
+              padding: "var(--space-2) var(--space-4)",
+              background: "rgba(253, 203, 110, 0.1)",
+              borderBottom: "1px solid rgba(253, 203, 110, 0.3)",
+              maxHeight: "60px",
+              overflowY: "auto",
+              flexShrink: 0,
+            }}
+          >
+            <div
+              style={{
+                fontSize: "var(--text-xs)",
+                fontWeight: 600,
+                color: "#FDCB6E",
+                marginBottom: "2px",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px"
+              }}
+            >
+              <Pin size={12} /> Pinned
+            </div>
+            {pinnedMessages.map((pm) => (
+              <div
+                key={`pin-${pm.id}`}
+                style={{
+                  fontSize: "var(--text-sm)",
+                  color: "var(--color-text)",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {pm.sender.displayName}: {pm.content}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Chat Messages Area */}
       <div
@@ -263,43 +354,148 @@ const DirectMessagePage = () => {
                           msg.sender.displayName.charAt(0).toUpperCase()
                         )}
                       </div>
+                      
                       <div
                         style={{
-                          background: isMe
-                            ? "var(--color-primary)"
-                            : "var(--color-surface-hover)",
-                          color: isMe ? "#fff" : "var(--color-text)",
-                          padding: "var(--space-2) var(--space-3)",
-                          borderRadius: "var(--radius-lg)",
-                          borderBottomRightRadius: isMe
-                            ? "2px"
-                            : "var(--radius-lg)",
-                          borderBottomLeftRadius: isMe
-                            ? "var(--radius-lg)"
-                            : "2px",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: isMe ? "flex-end" : "flex-start",
                           maxWidth: "80%",
-                          wordBreak: "break-word",
-                          fontSize: "var(--text-sm)",
                         }}
                       >
-                        {msg.content}
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "var(--space-2)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              background: isMe
+                                ? "var(--color-primary)"
+                                : "var(--color-surface-hover)",
+                              color: isMe ? "#fff" : "var(--color-text)",
+                              padding: "var(--space-2) var(--space-3)",
+                              borderRadius: "var(--radius-lg)",
+                              borderBottomRightRadius: isMe
+                                ? "2px"
+                                : "var(--radius-lg)",
+                              borderBottomLeftRadius: isMe
+                                ? "var(--radius-lg)"
+                                : "2px",
+                              wordBreak: "break-word",
+                              fontSize: "var(--text-sm)",
+                              border: msg.isPinned ? "1px solid #FDCB6E" : "none",
+                              fontStyle: msg.type === "SYSTEM" ? "italic" : "normal",
+                              opacity: msg.type === "SYSTEM" ? 0.85 : 1,
+                            }}
+                          >
+                            {msg.isPinned && (
+                              <Pin
+                                size={12}
+                                style={{ marginRight: 6, verticalAlign: "text-bottom", color: "#FDCB6E" }}
+                                title="Pinned message"
+                              />
+                            )}
+                            {msg.content}
+                          </div>
+
+                          {(isMe || msg.type !== "SYSTEM") && (
+                            <div
+                              style={{ display: "flex", gap: "var(--space-1)", position: "relative" }}
+                            >
+                              <button
+                                onClick={() => setOpenMenuId((prev) => (prev === msg.id ? null : msg.id))}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  opacity: 0.6,
+                                  padding: 0,
+                                }}
+                                title="Message actions"
+                              >
+                                <MoreVertical size={14} />
+                              </button>
+
+                              {openMenuId === msg.id && (
+                                <div
+                                  style={{
+                                    position: "absolute",
+                                    top: "18px",
+                                    right: isMe ? "0" : "auto",
+                                    left: isMe ? "auto" : "0",
+                                    minWidth: "130px",
+                                    background: "var(--color-surface)",
+                                    border: "1px solid var(--color-border)",
+                                    borderRadius: "8px",
+                                    boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+                                    zIndex: 10,
+                                    overflow: "hidden",
+                                  }}
+                                >
+                                  {msg.type !== "SYSTEM" && (
+                                    <button
+                                      onClick={() => {
+                                        togglePin(msg.id);
+                                        setOpenMenuId(null);
+                                      }}
+                                      style={{
+                                        width: "100%",
+                                        background: "transparent",
+                                        border: "none",
+                                        color: "var(--color-text)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "8px",
+                                        padding: "8px 10px",
+                                        cursor: "pointer",
+                                        fontSize: "12px",
+                                      }}
+                                    >
+                                      <Pin size={13} /> {msg.isPinned ? "Unpin Message" : "Pin Message"}
+                                    </button>
+                                  )}
+                                  {isMe && msg.type !== "SYSTEM" && (
+                                    <button
+                                      onClick={() => deleteMessage(msg.id)}
+                                      style={{
+                                        width: "100%",
+                                        background: "transparent",
+                                        border: "none",
+                                        color: "var(--color-danger)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "8px",
+                                        padding: "8px 10px",
+                                        cursor: "pointer",
+                                        fontSize: "12px",
+                                      }}
+                                    >
+                                      <Trash2 size={13} /> Delete Message
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "var(--color-text-muted)",
+                            marginTop: "4px",
+                            alignSelf: isMe ? "flex-end" : "flex-start",
+                          }}
+                        >
+                          {msg.sender.displayName} •{" "}
+                          {new Date(msg.createdAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </div>
                       </div>
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "10px",
-                        color: "var(--color-text-muted)",
-                        marginTop: "4px",
-                        alignSelf: isMe ? "flex-end" : "flex-start",
-                        marginRight: isMe ? "40px" : "0",
-                        marginLeft: isMe ? "0" : "40px",
-                      }}
-                    >
-                      {msg.sender.displayName} •{" "}
-                      {new Date(msg.createdAt).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
                     </div>
                   </div>
                 </div>

@@ -36,36 +36,32 @@ const register = async (req, res, next) => {
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    const user = await prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        displayName,
-        isVerified: false,
-      },
-      select: {
-        id: true,
-        email: true,
-        displayName: true,
-        isVerified: true,
-      },
-    });
-
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-    await prisma.verificationToken.create({
-      data: { email, token: otp, expiresAt },
+    await prisma.pendingUser.upsert({
+      where: { email },
+      update: {
+        displayName,
+        passwordHash,
+        token: otp,
+        expiresAt,
+      },
+      create: {
+        email,
+        displayName,
+        passwordHash,
+        token: otp,
+        expiresAt,
+      },
     });
 
     await sendOtpEmail(email, otp);
 
-    const token = generateToken(user.id);
-
     res.status(201).json({
-      message: "Account created successfully.",
-      token,
-      user,
+      message: "Please verify your email to complete registration.",
+      pendingVerification: true,
+      email,
     });
   } catch (err) {
     next(err);
@@ -180,28 +176,49 @@ const verifyEmail = async (req, res, next) => {
   try {
     const { email, otp } = req.body;
 
-    const record = await prisma.verificationToken.findFirst({
-      where: { email, token: otp },
+    const pendingUser = await prisma.pendingUser.findUnique({
+      where: { email },
     });
 
-    if (!record) {
+    if (!pendingUser || pendingUser.token !== otp) {
       return res.status(400).json({ error: "Invalid OTP" });
     }
 
-    if (new Date() > record.expiresAt) {
-      return res.status(400).json({ error: "OTP expired" });
+    if (new Date() > pendingUser.expiresAt) {
+      return res.status(400).json({ error: "OTP expired, please request a new one." });
     }
 
-    await prisma.user.update({
-      where: { email },
-      data: { isVerified: true },
+    const user = await prisma.user.create({
+      data: {
+        email: pendingUser.email,
+        displayName: pendingUser.displayName,
+        passwordHash: pendingUser.passwordHash,
+        isVerified: true,
+      },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        profilePhoto: true,
+        role: true,
+        isVerified: true,
+        trustScore: true,
+        bio: true,
+        interests: true,
+      },
     });
 
-    await prisma.verificationToken.deleteMany({
+    await prisma.pendingUser.delete({
       where: { email },
     });
 
-    res.json({ message: "Email verified successfully." });
+    const token = generateToken(user.id);
+
+    res.json({ 
+      message: "Account created and verified successfully.",
+      token,
+      user 
+    });
   } catch (err) {
     next(err);
   }
@@ -215,17 +232,18 @@ const resendOtp = async (req, res, next) => {
   try {
     const { email } = req.body;
     
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) return res.status(404).json({ error: "User not found." });
+    const pendingUser = await prisma.pendingUser.findUnique({ where: { email } });
     
-    // Clear old tokens
-    await prisma.verificationToken.deleteMany({ where: { email } });
+    if (!pendingUser) {
+      return res.status(404).json({ error: "No pending registration found for this email." });
+    }
     
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
     
-    await prisma.verificationToken.create({
-      data: { email, token: otp, expiresAt },
+    await prisma.pendingUser.update({
+      where: { email },
+      data: { token: otp, expiresAt },
     });
     
     await sendOtpEmail(email, otp);

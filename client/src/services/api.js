@@ -120,6 +120,8 @@ export const chatAPI = {
   getInbox: () => api.get("/chat/dms"),
   getDirectMessages: (friendId) => api.get(`/chat/dms/${friendId}`),
   markDMRead: (friendId) => api.put(`/chat/dms/${friendId}/read`),
+  pinDMMessage: (messageId) => api.put(`/chat/dms/message/${messageId}/pin`),
+  deleteDMMessage: (messageId) => api.delete(`/chat/dms/message/${messageId}`),
 };
 
 // Report API
